@@ -1,0 +1,25 @@
+name: .NET Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Restore
+        run: dotnet restore $(git ls-files '*.sln')
+
+      - name: Build
+        run: dotnet build $(git ls-files '*.sln') --configuration Release --no-restore

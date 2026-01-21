@@ -1,0 +1,52 @@
+name: .NET CI (Tests + SonarCloud Coverage)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/*.csproj
+
+      - name: Restore
+        shell: bash
+        run: dotnet restore $(git ls-files '*.sln')
+
+      - name: Build (Release)
+        shell: bash
+        run: dotnet build $(git ls-files '*.sln') --configuration Release --no-restore
+
+      - name: Test
+        shell: bash
+        run: >
+          dotnet test $(git ls-files '*.sln')
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test_results.trx"
+          --filter "Category!=LocalIntegration"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ runner.os }}
+          path: |
+            **/TestResults/*.trx
