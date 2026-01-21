@@ -1,4 +1,4 @@
-name: .NET CI (Tests + SonarCloud Coverage)
+name: .NET CI Tests
 
 on:
   push:
