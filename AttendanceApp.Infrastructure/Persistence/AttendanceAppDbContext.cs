@@ -1,4 +1,3 @@
-using AttendanceApp.Domain.Common;
 using AttendanceApp.Domain.Lectures;
 using AttendanceApp.Domain.Users;
 using Microsoft.EntityFrameworkCore;

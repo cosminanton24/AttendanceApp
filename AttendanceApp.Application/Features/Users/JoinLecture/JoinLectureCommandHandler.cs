@@ -21,6 +21,13 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
             throw new ValidationException($"User with ID {command.UserId} has already joined lecture with ID {command.LectureId}.");
         }
 
+        var userOngoingLectures = await _lectureRepo.GetStudentLecturesAsync(command.UserId, 0, 1, null, LectureStatus.InProgress, cancellationToken);
+        if(userOngoingLectures.Count > 0)
+        {
+            throw new ValidationException($"User with ID {command.UserId} has already joined a lecture.");
+        }
+
+
         var lecture = await _lectureRepo.GetByIdAsync(command.LectureId, cancellationToken)
             ?? throw new KeyNotFoundException($"No lecture with ID {command.LectureId} found.");
 

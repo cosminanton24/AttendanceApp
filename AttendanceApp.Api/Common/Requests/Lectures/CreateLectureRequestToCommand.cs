@@ -1,5 +1,4 @@
 using AttendanceApp.Application.Features.Lectures.CreateLecture;
-using AttendanceApp.Application.Features.Users.CreateUser;
 
 namespace AttendanceApp.Api.Common.Requests.Lectures;
 

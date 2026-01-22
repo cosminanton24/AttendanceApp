@@ -11,4 +11,6 @@ public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepos
     {
         return await _dbSet.FirstOrDefaultAsync(la => la.LectureId == lectureId && la.UserId == userId, cancellationToken);
     }
+
+    
 }

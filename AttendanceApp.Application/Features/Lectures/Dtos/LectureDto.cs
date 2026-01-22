@@ -11,5 +11,5 @@ public sealed record LectureDto
     LectureStatus Status,
     DateTime StartTime,
     TimeSpan Duration,
-    int AttendeesCount
+    int? AttendeesCount
 );

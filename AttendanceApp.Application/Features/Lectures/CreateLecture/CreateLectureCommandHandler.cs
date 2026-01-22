@@ -1,5 +1,3 @@
-
-using AttendanceApp.Application.Common.Hash;
 using AttendanceApp.Application.Common.Results;
 using AttendanceApp.Domain.Repositories;
 using AttendanceApp.Domain.Lectures;

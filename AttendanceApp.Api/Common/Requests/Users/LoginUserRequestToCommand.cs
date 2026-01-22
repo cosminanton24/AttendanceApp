@@ -1,4 +1,3 @@
-using AttendanceApp.Application.Features.Users.CreateUser;
 using AttendanceApp.Application.Features.Users.LoginUser;
 
 namespace AttendanceApp.Api.Common.Requests.Users;

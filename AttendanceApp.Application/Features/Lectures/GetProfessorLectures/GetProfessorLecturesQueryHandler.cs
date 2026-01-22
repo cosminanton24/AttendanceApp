@@ -1,8 +1,5 @@
-
-using AttendanceApp.Application.Common.Hash;
 using AttendanceApp.Application.Common.Results;
 using AttendanceApp.Domain.Repositories;
-using AttendanceApp.Domain.Lectures;
 using MediatR;
 using AttendanceApp.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
@@ -14,8 +11,12 @@ public class GetProfessorLecturesCommandQuery(ILectureRepository _lectureRepo, I
 {
     public async Task<Result<IReadOnlyList<LectureDto>>> Handle(GetProfessorLecturesQuery command, CancellationToken cancellationToken)
     {
-        _ = await _userRepo.GetByIdAsync(command.ProfessorId, cancellationToken)
+        var user = await _userRepo.GetByIdAsync(command.ProfessorId, cancellationToken)
             ?? throw new KeyNotFoundException($"No account with id {command.ProfessorId} found.");
+        if(user.Type == UserType.Student)
+        {
+            throw new ValidationException($"User with id {command.ProfessorId} is not authorized to have lectures.");
+        }
 
 
         var lectures = await _lectureRepo.GetProfessorLecturesAsync(

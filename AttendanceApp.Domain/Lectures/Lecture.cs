@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using AttendanceApp.Domain.Common;
 using AttendanceApp.Domain.Enums;
 
@@ -65,5 +63,8 @@ public class Lecture : AggregateRoot<Guid>
         _attendees.Add(new LectureAttendee(Id, userId));
     }
 
-
+    public void ChangeStatus(LectureStatus status)
+    {
+        Status = status;
+    }
 }

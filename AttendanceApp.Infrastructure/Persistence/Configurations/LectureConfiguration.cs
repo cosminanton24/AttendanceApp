@@ -1,8 +1,6 @@
 using AttendanceApp.Domain.Lectures;
-using AttendanceApp.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace AttendanceApp.Infrastructure.Persistence.Configurations;
 
