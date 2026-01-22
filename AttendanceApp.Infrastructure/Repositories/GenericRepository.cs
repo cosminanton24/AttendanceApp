@@ -7,10 +7,10 @@ namespace AttendanceApp.Infrastructure.Repositories;
 
 public class GenericRepository<T> : IRepository<T> where T : Entity<Guid>
 {
-    protected readonly AttendanceAppAppDbContext _db;
+    protected readonly AttendanceAppDbContext _db;
     protected readonly DbSet<T> _dbSet;
 
-    public GenericRepository(AttendanceAppAppDbContext db)
+    public GenericRepository(AttendanceAppDbContext db)
     {
         _db = db;
         _dbSet = db.Set<T>();

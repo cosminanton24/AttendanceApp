@@ -4,7 +4,7 @@ using AttendanceApp.Infrastructure.Persistence;
 
 namespace AttendanceApp.Infrastructure.Repositories;
 
-public class LectureAttendeeRepository(AttendanceAppAppDbContext db) : GenericRepository<LectureAttendee>(db), ILectureAttendeeRepository
+public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepository<LectureAttendee>(db), ILectureAttendeeRepository
 {
     
 }

@@ -3,7 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
-namespace CampusEats.Core.Application.Common.Jwt;
+namespace AttendanceApp.Core.Application.Common.Jwt;
 public static class JwtTokenGenerator
 {
     public static string GenerateToken(string userId, string userEmail, int expiresInMinutes = 60)

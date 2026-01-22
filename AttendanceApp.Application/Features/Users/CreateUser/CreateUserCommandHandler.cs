@@ -23,6 +23,6 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
         );
         
         await _userRepo.AddAsync(newUser, cancellationToken);
-        return Result.Ok();
+        return Result.Created();
     }
 }
