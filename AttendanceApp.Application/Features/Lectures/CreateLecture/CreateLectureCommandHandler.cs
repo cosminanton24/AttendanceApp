@@ -32,6 +32,7 @@ public class CreateLectureCommandHandler(ILectureRepository _lectureRepo, IUserR
         );
 
         await _lectureRepo.AddAsync(newLecture, cancellationToken);
+        await _lectureRepo.SaveChangesAsync(cancellationToken);
         
         return Result<Guid>.Created(newLectureId);
     }

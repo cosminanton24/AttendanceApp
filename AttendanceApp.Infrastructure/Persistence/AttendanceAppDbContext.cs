@@ -11,9 +11,10 @@ public class AttendanceAppDbContext : DbContext
     {
     }
 
-    public DbSet<User> Clients { get; set; }
-    public DbSet<Lecture> Buildings { get; set; }
-    public DbSet<LectureAttendee> Countries { get; set; }
+    public DbSet<User> Users { get; set; }
+    public DbSet<Lecture> Lectures { get; set; }
+    public DbSet<LectureAttendee> LectureAttendees { get; set; }
+    public DbSet<UserFollowing> UserFollowings { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

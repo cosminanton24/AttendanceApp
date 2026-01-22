@@ -12,7 +12,7 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
     public async Task<Result<Guid>> Handle(CreateUserCommand command, CancellationToken cancellationToken)
     {       
         var hashedPassword = await PasswordHasher.HashPasswordAsync(command.Password);
-        
+
         var newUserId = Guid.NewGuid();
         var newUser = new User(
             newUserId,
@@ -23,6 +23,8 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
         );
         
         await _userRepo.AddAsync(newUser, cancellationToken);
+        await _userRepo.SaveChangesAsync(cancellationToken);
+        
         return Result<Guid>.Created(newUserId);
     }
 }

@@ -1,6 +1,10 @@
 using AttendanceApp.Api.Common;
 using AttendanceApp.Api.Common.Requests.Users;
+using AttendanceApp.Application.Common.Jwt;
+using AttendanceApp.Application.Features.Users.GetFollowState;
+using AttendanceApp.Application.Features.Users.ToggleFollowUser;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AttendanceApp.Api.Controllers;
@@ -33,6 +37,26 @@ public class UserController(IMediator mediator) : ControllerBase
                 Expires = DateTimeOffset.UtcNow.AddHours(1)
             });
         }     
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("following/{profId:guid}")]
+    public async Task<IActionResult> GetFollowState([FromRoute] Guid profId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var query = new GetFollowStateQuery(userId, profId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpPost("toggleFollow/{profId:guid}")]
+    public async Task<IActionResult> ToggleFollowUser([FromRoute] Guid profId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var command = new ToggleFollowUserCommand(userId, profId);
+        var result = await mediator.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }
 }
