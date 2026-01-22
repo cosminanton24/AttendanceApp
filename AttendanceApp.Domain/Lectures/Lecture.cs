@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using AttendanceApp.Domain.Common;
 using AttendanceApp.Domain.Enums;
 
@@ -9,6 +11,8 @@ public class Lecture : AggregateRoot<Guid>
 
     public Guid ProfessorId { get; }
     public LectureStatus Status { get; private set; }
+    public string Name { get; private set; } = default!;
+    public string Description { get; private set; } = default!;
     public DateTime StartTime { get; }
     public TimeSpan Duration { get; }
 
@@ -16,7 +20,7 @@ public class Lecture : AggregateRoot<Guid>
 
     private Lecture() { }
 
-    public Lecture(Guid id, Guid professorId, DateTime startTime, TimeSpan duration)
+    public Lecture(Guid id, Guid professorId, string name, string description, DateTime startTime, TimeSpan duration)
     {
         Guard.NotEmpty(id, nameof(id));
         Guard.NotEmpty(professorId, nameof(professorId));
@@ -27,6 +31,8 @@ public class Lecture : AggregateRoot<Guid>
         ProfessorId = professorId;
         StartTime = startTime;
         Duration = duration;
+        Name = name;
+        Description = description;
         Status = LectureStatus.Scheduled;
     }
 

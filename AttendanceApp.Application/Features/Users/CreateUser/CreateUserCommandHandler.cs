@@ -7,13 +7,13 @@ using MediatR;
 
 namespace AttendanceApp.Application.Features.Users.CreateUser;
 
-public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandler<CreateUserCommand, Result>
+public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandler<CreateUserCommand, Result<Guid>>
 {
-    public async Task<Result> Handle(CreateUserCommand command, CancellationToken cancellationToken)
-    {
-        var newUserId = Guid.NewGuid();
+    public async Task<Result<Guid>> Handle(CreateUserCommand command, CancellationToken cancellationToken)
+    {       
         var hashedPassword = await PasswordHasher.HashPasswordAsync(command.Password);
-
+        
+        var newUserId = Guid.NewGuid();
         var newUser = new User(
             newUserId,
             command.Type,
@@ -23,6 +23,6 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
         );
         
         await _userRepo.AddAsync(newUser, cancellationToken);
-        return Result.Created();
+        return Result<Guid>.Created(newUserId);
     }
 }
