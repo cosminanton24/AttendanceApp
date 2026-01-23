@@ -42,6 +42,7 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBeh
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ILectureRepository, LectureRepository>();
 builder.Services.AddScoped<ILectureAttendeeRepository, LectureAttendeeRepository>();
+builder.Services.AddScoped<IUserFollowingsRepository, UserFollowingsRepository>();
  
 var app = builder.Build();
  

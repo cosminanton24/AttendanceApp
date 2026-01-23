@@ -16,6 +16,7 @@ public sealed class LectureAttendee : Entity<Guid>
         Guard.NotEmpty(lectureId, nameof(lectureId));
         Guard.NotEmpty(userId, nameof(userId));
 
+        Id = Guid.NewGuid();
         LectureId = lectureId;
         UserId = userId;
         TimeJoined = DateTime.UtcNow;

@@ -18,6 +18,7 @@ public sealed class UserFollowing : Entity<Guid>
         if (followerId == followedId)
             throw new DomainException("A user cannot follow themselves.");
 
+        Id = Guid.NewGuid();
         FollowerId = followerId;
         FollowedId = followedId;
         FollowedAt = DateTime.UtcNow;
