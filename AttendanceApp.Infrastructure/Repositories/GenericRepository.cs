@@ -16,9 +16,9 @@ public class GenericRepository<T> : IRepository<T> where T : Entity<Guid>
         _dbSet = db.Set<T>();
     }
 
-    public virtual async Task AddAsync(T entry, CancellationToken ct = default)
+    public virtual async Task AddAsync(T entry, CancellationToken cancellationToken = default)
     {
-        await _dbSet.AddAsync(entry, ct);
+        await _dbSet.AddAsync(entry, cancellationToken);
     }
 
     public virtual void Delete(T entry)
@@ -26,25 +26,25 @@ public class GenericRepository<T> : IRepository<T> where T : Entity<Guid>
         _dbSet.Remove(entry);
     }
 
-    public virtual async Task DeleteByIdAsync(Guid id, CancellationToken ct = default)
+    public virtual async Task DeleteByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var entity = await _dbSet.FindAsync([id], ct) ?? throw new KeyNotFoundException($"Element {id} cannot be deleted, it does't exist.");
+        var entity = await _dbSet.FindAsync([id], cancellationToken) ?? throw new KeyNotFoundException($"Element {id} cannot be deleted, it does't exist.");
         _dbSet.Remove(entity);
     }
 
-    public virtual async Task<IEnumerable<T>> GetAllAsync(CancellationToken ct = default)
+    public virtual async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await _dbSet.AsNoTracking().ToListAsync(ct);
+        return await _dbSet.AsNoTracking().ToListAsync(cancellationToken);
     }
 
-    public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _dbSet.FirstOrDefaultAsync(e => e.Id == id, cancellationToken: ct);
+        return await _dbSet.FirstOrDefaultAsync(e => e.Id == id, cancellationToken: cancellationToken);
     }
 
-    public virtual async Task SaveChangesAsync(CancellationToken ct = default)
+    public virtual async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        await _db.SaveChangesAsync(ct);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public virtual void Update(T entry) 
