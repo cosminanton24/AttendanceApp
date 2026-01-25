@@ -15,7 +15,7 @@ public class LoginUserCommandHandler(IUserRepository _userRepo) : IRequestHandle
         var user = await _userRepo.GetByEmailAsync(command.Email, cancellationToken) 
             ?? throw new KeyNotFoundException($"No account with email {command.Email} found.");
 
-        if(!await PasswordHasher.VerifyPasswordAsync(user.Password, command.Password))
+        if(!await PasswordHasher.VerifyPasswordAsync(command.Password, user.Password))
         {
             throw new ValidationException($"Incorrect password for {command.Email}.");
         }

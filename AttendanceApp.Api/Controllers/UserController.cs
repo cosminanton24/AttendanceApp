@@ -10,11 +10,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace AttendanceApp.Api.Controllers;
 
 [ApiController]
-[Route("api/users/")]
+[Route("api/users")]
 public class UserController(IMediator mediator) : ControllerBase
 {
     [HttpPost("register")]
-    public async Task<IActionResult> CreateUser([FromBody] CerateUserRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
         var command = CreateUserRequesToCommand.ToCommand(request);
         var result = await mediator.Send(command, cancellationToken);

@@ -4,7 +4,7 @@ namespace AttendanceApp.Api.Common.Requests.Users;
 
 public static class CreateUserRequesToCommand
 {
-    public static CreateUserCommand ToCommand(CerateUserRequest request)
+    public static CreateUserCommand ToCommand(CreateUserRequest request)
     {
         return new CreateUserCommand(
             request.Name,

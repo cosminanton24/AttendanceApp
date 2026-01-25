@@ -29,12 +29,9 @@ public sealed class LectureConfiguration : IEntityTypeConfiguration<Lecture>
         builder.Property(x => x.Duration)
             .IsRequired();
 
-        builder.HasMany<LectureAttendee>("_attendees")
+        builder.HasMany(x => x.Attendees)
             .WithOne()
             .HasForeignKey(a => a.LectureId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        builder.Navigation(nameof(Lecture.Attendees))
-            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

@@ -4,7 +4,7 @@ using AttendanceApp.Domain.Enums;
 
 namespace AttendanceApp.Api.Common.Requests.Users;
 
-public sealed record CerateUserRequest()
+public sealed record CreateUserRequest()
 {
     [JsonRequired]
     [StringLength(100)]
