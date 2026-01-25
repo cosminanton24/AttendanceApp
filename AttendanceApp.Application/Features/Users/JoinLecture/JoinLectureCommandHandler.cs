@@ -46,6 +46,6 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
         await _lectureAttendeeRepository.AddAsync(newLecture, cancellationToken);
         await _lectureAttendeeRepository.SaveChangesAsync(cancellationToken);
 
-        return Result.Created();
+        return Result.Ok();
     }
 }

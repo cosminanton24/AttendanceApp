@@ -34,7 +34,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddDbContext<AttendanceAppDbContext>(options =>
         options.UseSqlServer(
-            builder.Configuration.GetConnectionString("DefaultConnection")
+            builder.Configuration.GetConnectionString(Environment.GetEnvironmentVariable("DB_CONNECTION_NAME") ?? "DefaultConnection")
         )
     );
 }

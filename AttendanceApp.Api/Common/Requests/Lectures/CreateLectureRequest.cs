@@ -3,19 +3,19 @@ using System.Text.Json.Serialization;
 
 namespace AttendanceApp.Api.Common.Requests.Lectures;
 
-public sealed record CerateLectureRequest()
+public sealed record CreateLectureRequest()
 {
     [JsonRequired]
     [StringLength(100)]
-    public string Name { get; } = default!;
+    public string Name { get; init; } = default!;
 
     [JsonRequired]
     [StringLength(500)]
-    public string Description { get; } = default!;
+    public string Description { get; init; } = default!;
 
     [JsonRequired]
-    public DateTime StartTime { get; }
+    public DateTime StartTime { get; init; }
 
     [JsonRequired]
-    public TimeSpan Duration { get; }
+    public TimeSpan Duration { get; init; }
 };

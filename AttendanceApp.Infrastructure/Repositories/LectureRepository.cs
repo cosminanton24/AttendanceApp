@@ -21,7 +21,7 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
         }
 
         var lectures = query
-            .Include("_attendees")
+            .Include(l => l.Attendees)
             .OrderByDescending(lecture => lecture.StartTime)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize);
@@ -42,7 +42,7 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
 
         var query = db.Lectures
             .AsNoTracking()
-            .Include("_attendees")
+            .Include(l => l.Attendees)
             .Where(l =>
                 db.Set<LectureAttendee>()
                     .Any(a => a.UserId == userId && a.LectureId == l.Id));

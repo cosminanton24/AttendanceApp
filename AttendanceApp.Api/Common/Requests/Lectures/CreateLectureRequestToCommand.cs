@@ -4,7 +4,7 @@ namespace AttendanceApp.Api.Common.Requests.Lectures;
 
 public static class CerateLectureRequestToCommand
 {
-    public static CreateLectureCommand ToCommand(Guid professorId, CerateLectureRequest request)
+    public static CreateLectureCommand ToCommand(Guid professorId, CreateLectureRequest request)
     {
         return new CreateLectureCommand(
             professorId,

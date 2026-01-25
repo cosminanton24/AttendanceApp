@@ -17,7 +17,7 @@ public class LectureController(IMediator mediator) : ControllerBase
 {
     [Authorize]
     [HttpPost]
-    public async Task<IActionResult> CreateLecture([FromBody] CerateLectureRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateLecture([FromBody] CreateLectureRequest request, CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
         var command = CerateLectureRequestToCommand.ToCommand(userId, request);

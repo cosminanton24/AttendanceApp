@@ -24,7 +24,7 @@ public static class ResultActionResultExtensions
     public static IActionResult ToActionResult(this ControllerBase controller, Result result)
     {
         if (result.IsSuccess)
-            return controller.NoContent();
+            return controller.Ok();
 
         return controller.ToProblem(result.Errors);
     }

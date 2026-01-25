@@ -407,7 +407,7 @@ public class UserTests
 
         // Act & Assert
         Assert.NotNull(user.AttendedLectures);
-        Assert.IsAssignableFrom<IReadOnlyCollection<Guid>>(user.AttendedLectures);
+        Assert.IsType<IReadOnlyCollection<Guid>>(user.AttendedLectures, exactMatch: false);
         Assert.Empty(user.AttendedLectures);
     }
 

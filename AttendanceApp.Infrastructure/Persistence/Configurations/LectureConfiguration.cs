@@ -33,5 +33,8 @@ public sealed class LectureConfiguration : IEntityTypeConfiguration<Lecture>
             .WithOne()
             .HasForeignKey(a => a.LectureId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(x => x.Attendees)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
