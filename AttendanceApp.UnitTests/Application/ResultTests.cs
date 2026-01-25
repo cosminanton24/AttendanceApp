@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using AttendanceApp.Application.Common.Results;
-using Xunit;
 
 namespace AttendanceApp.Tests.Application.Common.Results
 {

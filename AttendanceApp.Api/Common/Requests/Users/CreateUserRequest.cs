@@ -19,5 +19,5 @@ public sealed record CreateUserRequest()
     public string Password { get; init; } = default!;
 
     [JsonRequired]
-    public UserType Type { get; init; }
+    public UserType UserType { get; init; }
 };

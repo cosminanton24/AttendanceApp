@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AttendanceApp.Api\AttendanceApp.Api.csproj" />
+    <ProjectReference Include="..\AttendanceApp.Web\AttendanceApp.Web.csproj" />
     <ProjectReference Include="..\AttendanceApp.Infrastructure\AttendanceApp.Infrastructure.csproj" />
   </ItemGroup>
 

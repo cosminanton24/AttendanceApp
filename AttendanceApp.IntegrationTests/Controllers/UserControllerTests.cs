@@ -56,7 +56,7 @@ public sealed class UserControllerIntegrationTests : IAsyncLifetime
             Name = "Test User",
             Email = email,
             Password = password,
-            Type = GetAnyUserType()
+            UserType = GetAnyUserType()
         };
 
         var registerResponse = await _httpClient.PostAsJsonAsync("/api/users/register", registerBody);
@@ -98,7 +98,7 @@ public sealed class UserControllerIntegrationTests : IAsyncLifetime
             Name = $"{namePrefix} User",
             Email = email,
             Password = password,
-            Type = userType ?? GetAnyUserType()
+            UserType = userType ?? GetAnyUserType()
         };
 
         var registerResponse = await _httpClient.PostAsJsonAsync("/api/users/register", registerBody);
@@ -121,7 +121,7 @@ public sealed class UserControllerIntegrationTests : IAsyncLifetime
             Name = "Test User",
             Email = email,
             Password = password,
-            Type = GetAnyUserType()
+            UserType = GetAnyUserType()
         };
 
         // Act 1: Register

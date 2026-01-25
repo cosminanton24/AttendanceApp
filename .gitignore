@@ -84,6 +84,9 @@ docker-compose.override.yml
 *.ipr
 *.iws
 
+# Client-side libraries (LibMan)
+*/wwwroot/lib/
+
 # ----------------------------------------
 # END OF FILE
 # ----------------------------------------

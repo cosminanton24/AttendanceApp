@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AttendanceApp.UnitTests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AttendanceApp.IntegrationTests", "AttendanceApp.IntegrationTests\AttendanceApp.IntegrationTests.csproj", "{A62213D4-9DE2-46FB-A270-FF6ACD77FE5E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AttendanceApp.Web", "AttendanceApp.Web\AttendanceApp.Web.csproj", "{30083F93-C142-4047-A8FF-7DD7AF34026F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{A62213D4-9DE2-46FB-A270-FF6ACD77FE5E}.Release|x64.Build.0 = Release|Any CPU
 		{A62213D4-9DE2-46FB-A270-FF6ACD77FE5E}.Release|x86.ActiveCfg = Release|Any CPU
 		{A62213D4-9DE2-46FB-A270-FF6ACD77FE5E}.Release|x86.Build.0 = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|x64.Build.0 = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Debug|x86.Build.0 = Debug|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|x64.ActiveCfg = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|x64.Build.0 = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|x86.ActiveCfg = Release|Any CPU
+		{30083F93-C142-4047-A8FF-7DD7AF34026F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

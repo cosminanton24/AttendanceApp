@@ -57,7 +57,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
             Name = "Test User",
             Email = email,
             Password = password,
-            Type = type ?? GetAnyUserType()
+            UserType = type ?? GetAnyUserType()
         };
 
         var registerResponse = await _httpClient.PostAsJsonAsync("/api/users/register", registerBody);
@@ -97,7 +97,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
             Name = $"{namePrefix} User",
             Email = email,
             Password = password,
-            Type = userType ?? GetAnyUserType()
+            UserType = userType ?? GetAnyUserType()
         };
 
         var registerResponse = await _httpClient.PostAsJsonAsync("/api/users/register", registerBody);
@@ -284,7 +284,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
     public async Task JoinLecture_WithValidAuth_ReturnsSuccess()
     {
         // Arrange: create professor, create lecture, and authenticate as student
-        var (profId, _) = await CreateAndAuthenticateUserAsync();
+        var (_, _) = await CreateAndAuthenticateUserAsync();
 
         // Switch to professor context to create lecture
         _httpClient.DefaultRequestHeaders.Authorization = null;
@@ -296,12 +296,12 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
             Name = "Professor User",
             Email = profEmail,
             Password = profPassword,
-            Type = UserType.Professor
+            UserType = UserType.Professor
         };
         
         var profRegisterResponse = await _httpClient.PostAsJsonAsync("/api/users/register", profRegisterBody);
         profRegisterResponse.EnsureSuccessStatusCode();
-        var actualProfId = await profRegisterResponse.Content.ReadAsAsync<Guid>();
+        var _ = await profRegisterResponse.Content.ReadAsAsync<Guid>();
 
         var profLoginBody = new LoginUserRequest
         {
@@ -331,7 +331,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
             Name = "Student User",
             Email = studentEmail,
             Password = studentPassword,
-            Type = GetAnyUserType()
+            UserType = GetAnyUserType()
         };
 
         var studentRegisterResponse = await _httpClient.PostAsJsonAsync("/api/users/register", studentRegisterBody);

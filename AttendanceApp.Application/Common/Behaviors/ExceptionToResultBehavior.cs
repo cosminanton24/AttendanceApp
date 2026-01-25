@@ -66,6 +66,9 @@ public sealed class ExceptionToResultBehavior<TRequest, TResponse>(
 
     private void LogWithLevel(LogLevel level, Exception ex, string requestName)
     {
+        if (!logger.IsEnabled(level))
+            return;
+            
         switch (level)
         {
             case LogLevel.Warning:

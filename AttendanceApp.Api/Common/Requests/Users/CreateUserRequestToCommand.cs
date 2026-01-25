@@ -10,7 +10,7 @@ public static class CreateUserRequesToCommand
             request.Name,
             request.Email,
             request.Password,
-            request.Type
+            request.UserType
         );
     }
 }

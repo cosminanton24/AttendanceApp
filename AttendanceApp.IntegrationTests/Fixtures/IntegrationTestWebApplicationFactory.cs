@@ -1,4 +1,5 @@
 using AttendanceApp.Infrastructure.Persistence;
+using AttendanceApp.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AttendanceApp.IntegrationTests.Fixtures;
 
-
-public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory<Program>
+public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory<WebHostMarker>
 {
     private string? _dbName;
 

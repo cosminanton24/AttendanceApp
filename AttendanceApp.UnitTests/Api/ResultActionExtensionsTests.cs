@@ -176,7 +176,7 @@ public sealed class ResultActionResultExtensionsTests
         Assert.NotNull(ext);
 
         // Extension is created via LINQ Select of anonymous objects => treat as IEnumerable<object>
-        var items = Assert.IsAssignableFrom<IEnumerable<object>>(ext);
+        var items = Assert.IsType<IEnumerable<object>>(ext, exactMatch: false);
         var list = items.ToList();
         Assert.Equal(2, list.Count);
 
