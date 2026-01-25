@@ -1,14 +1,10 @@
-using System;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Threading.Tasks;
 using AttendanceApp.Api.Common.Requests.Users;
 using AttendanceApp.Domain.Enums;
 using AttendanceApp.IntegrationTests.Fixtures;
 using AttendanceApp.IntegrationTests.Helpers;
-using Xunit;
 
 namespace AttendanceApp.IntegrationTests.Controllers;
 

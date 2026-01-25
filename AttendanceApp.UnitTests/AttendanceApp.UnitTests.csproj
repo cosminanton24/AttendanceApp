@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AttendanceApp.Domain\AttendanceApp.Domain.csproj" />
     <ProjectReference Include="..\AttendanceApp.Application\AttendanceApp.Application.csproj" />
+    <ProjectReference Include="..\AttendanceApp.Api\AttendanceApp.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,3 @@
-using AttendanceApp.Application.Features.Lectures.CreateLecture;
 using AttendanceApp.Application.Features.Lectures.UpdateStatus;
 
 namespace AttendanceApp.Api.Common.Requests.Lectures;
