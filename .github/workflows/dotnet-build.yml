@@ -19,7 +19,7 @@ jobs:
             **/*.csproj
 
       - name: Restore
-        run: dotnet restore $(git ls-files '*.sln')
+        run: dotnet restore
 
       - name: Build
-        run: dotnet build $(git ls-files '*.sln') --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore

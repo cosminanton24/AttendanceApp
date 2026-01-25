@@ -27,16 +27,16 @@ jobs:
 
       - name: Restore
         shell: bash
-        run: dotnet restore $(git ls-files '*.sln')
+        run: dotnet restore
 
       - name: Build (Release)
         shell: bash
-        run: dotnet build $(git ls-files '*.sln') --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore
 
       - name: Test
         shell: bash
         run: >
-          dotnet test $(git ls-files '*.sln')
+          dotnet test
           --configuration Release
           --no-build
           --verbosity normal
@@ -82,7 +82,7 @@ jobs:
 
       - name: Restore
         shell: bash
-        run: dotnet restore $(git ls-files '*.sln')
+        run: dotnet restore
 
       - name: Create coverlet.runsettings (OpenCover)
         shell: bash
@@ -117,12 +117,12 @@ jobs:
 
       - name: Build (Release)
         shell: bash
-        run: dotnet build $(git ls-files '*.sln') --configuration Release --no-restore
+        run: dotnet build  --configuration Release --no-restore
 
       - name: Test (with OpenCover coverage)
         shell: bash
         run: >
-          dotnet test $(git ls-files '*.sln')
+          dotnet test
           --configuration Release
           --no-build
           --verbosity normal

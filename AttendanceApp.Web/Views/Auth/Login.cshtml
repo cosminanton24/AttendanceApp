@@ -173,7 +173,7 @@ option{
         // nice generic mapping for common statuses (optional)
         if (!msg) {
           if (res.status === 401) return showError("Invalid email or password.");
-          if (res.status === 403) return showError("You don’t have access to sign in.");
+          if (res.status === 403) return showError("You don't have access to sign in.");
           showError("Login failed. Please try again.");
           return;
         }
