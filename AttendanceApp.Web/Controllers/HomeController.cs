@@ -1,3 +1,5 @@
+using AttendanceApp.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AttendanceApp.Web.Controllers;
@@ -6,5 +8,12 @@ namespace AttendanceApp.Web.Controllers;
 public class HomeController : Controller
 {
     [HttpGet("index")]
-    public IActionResult Index() => Content("OK - Web is running");
+    public IActionResult Index()
+    {
+        var model = new Models.HomeViewModel
+        {
+                UserType = UserType.Student
+        };
+        return View("Home", model);
+    }
 }

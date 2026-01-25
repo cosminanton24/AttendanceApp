@@ -2,6 +2,7 @@
     ViewData["Title"] = "Register";
 }
 
+<link rel="stylesheet" href="~/css/auth.css" />
 <div class="wrap">
   <div class="card">
     <h1>Register</h1>
@@ -40,78 +41,6 @@
   </div>
 </div>
 
-<style>
-  :root{ --bg:#070a12; --card:#0b1220; --stroke:rgba(255,255,255,.08); --text:#e7eefc; --muted:#9fb0c6; }
-  body{ margin:0; min-height:100vh; color:var(--text);
-    background:
-      radial-gradient(900px 500px at 20% 10%, rgba(59,130,246,.18), transparent 55%),
-      radial-gradient(900px 500px at 80% 90%, rgba(96,165,250,.14), transparent 55%),
-      linear-gradient(180deg, var(--bg), #0b1220);
-  }
-  .wrap{ min-height:100vh; display:grid; place-items:center; padding:24px; }
-  .card{ width:min(420px, 100%); background:rgba(11,18,32,.72); border:1px solid var(--stroke);
-    border-radius:18px; padding:22px; box-shadow:0 24px 80px rgba(0,0,0,.55); backdrop-filter: blur(10px);
-  }
-  h1{ margin:0 0 6px; font-size:24px; }
-  .sub{ margin:0 0 16px; color:var(--muted); font-size:13px; }
-  .field{ display:flex; flex-direction:column; gap:8px; margin:12px 0; }
-  label{ color:var(--muted); font-size:13px; }
-  input{ padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.09);
-    background:rgba(7,10,18,.65); color:var(--text); outline:none;
-  }
-  input:focus{ border-color:rgba(96,165,250,.55); box-shadow:0 0 0 5px rgba(59,130,246,.14); }
-  .btn{ width:100%; margin-top:10px; border:0; cursor:pointer; padding:12px 14px; border-radius:14px;
-    font-weight:800; color:#071022; background:linear-gradient(90deg,#3b82f6,#60a5fa);
-  }
-  .err{ margin:10px 0; padding:10px; border-radius:12px; border:1px solid rgba(96,165,250,.35);
-    background:rgba(59,130,246,.12);
-  }
-  .hint{ margin-top:12px; color:var(--muted); font-size:13px; text-align:center; }
-  .hint a{ color:#60a5fa; text-decoration:none; font-weight:800; }
-  /* inputs + select share the same base style */
-input,
-select{
-  padding:12px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.09);
-  background:rgba(7,10,18,.65);
-  color:var(--text);
-  outline:none;
-  font-size:14px;
-}
-
-/* focus state */
-input:focus,
-select:focus{
-  border-color:rgba(96,165,250,.55);
-  box-shadow:0 0 0 5px rgba(59,130,246,.14);
-}
-
-/* remove native select styling */
-select{
-  appearance:none;
-  -webkit-appearance:none;
-  -moz-appearance:none;
-  cursor:pointer;
-
-  /* custom arrow */
-  background-image:
-    linear-gradient(45deg, transparent 50%, #9fb0c6 50%),
-    linear-gradient(135deg, #9fb0c6 50%, transparent 50%);
-  background-position:
-    calc(100% - 18px) calc(50% - 3px),
-    calc(100% - 12px) calc(50% - 3px);
-  background-size:6px 6px;
-  background-repeat:no-repeat;
-}
-
-/* option background for dark theme */
-select option{
-  background:#0b1220;
-  color:var(--text);
-}
-
-</style>
 
 <script>
   const form = document.getElementById("registerForm");
