@@ -1,0 +1,93 @@
+@using AttendanceApp.Domain.Enums
+@model AttendanceApp.Web.Models.HomeViewModel
+@{
+    ViewData["Title"] = "Home";
+    Layout = "_HomeLayout";
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" />
+}
+<nav class="navbar">
+    <div class="nav-left">
+        <span class="navbar-brand">AttendanceApp</span>
+    </div>
+
+    <div class="nav-right">
+        <!-- Calendar button -->
+        <button id="calendarBtn" class="calendar-btn" aria-label="Calendar" type="button">Calendar</button>
+        <!-- Search -->
+        <input type="search"
+               class="nav-search"
+               placeholder="Search" />
+
+        <!-- Profile button -->
+        <button class="profile-btn" aria-label="Profile">
+            <i class="bi bi-person"></i>
+        </button>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    @if (Model.UserType == UserType.Student)
+    {
+        @await Html.PartialAsync("_StudentHome")
+        <script src="~/js/student-home.js" asp-append-version="true"></script>
+    }
+    else if (Model.UserType == UserType.Professor)
+    {
+        <partial name="_ProfessorHome" />
+    }
+    else if (Model.UserType == UserType.Admin)
+    {
+        <partial name="_AdminHome" />
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            Unknown user role.
+        </div>
+    }
+
+    
+</div>
+
+<!-- Calendar popover -->
+<div id="calendarPopover" class="cal-popover" aria-hidden="true">
+  <div class="cal-head">
+    <div class="cal-title">
+      <button type="button" class="cal-nav" data-cal-prev aria-label="Previous month">‹</button>
+      <span data-cal-month></span>
+      <button type="button" class="cal-nav" data-cal-next aria-label="Next month">›</button>
+    </div>
+
+    <div class="cal-actions">
+      <button type="button" class="cal-today" data-cal-today>Today</button>
+      <button type="button" class="cal-close" data-cal-close aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="cal-body">
+    <!-- Month -->
+    <div class="cal-month">
+      <div class="cal-dow">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+      </div>
+      <div class="cal-grid" data-cal-grid></div>
+    </div>
+
+    <!-- Day timeline -->
+    <div class="cal-day">
+      <div class="cal-day-head">
+        <span data-cal-daylabel></span>
+      </div>
+      <div class="cal-timeline">
+        <div class="cal-hours" data-cal-hours></div>
+        <div class="cal-events" data-cal-events></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/home.js" asp-append-version="true"></script>
+}

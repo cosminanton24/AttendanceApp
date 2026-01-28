@@ -1,8 +1,10 @@
-@{
+@{ 
     ViewData["Title"] = "Register";
+    Layout = "_AuthLayout";
 }
-
-<link rel="stylesheet" href="~/css/auth.css" />
+@section Styles {
+    <link rel="stylesheet" href="~/css/auth.css" asp-append-version="true" />
+}
 <div class="wrap">
   <div class="card">
     <h1>Register</h1>

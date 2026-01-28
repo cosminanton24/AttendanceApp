@@ -14,6 +14,6 @@ public class HomeController : Controller
         {
                 UserType = UserType.Student
         };
-        return View("Home", model);
+        return View(model);
     }
 }

@@ -1,0 +1,50 @@
+<div class="home-wrap">
+  <!-- JOIN STATE -->
+  <div id="joinState" class="home-card" hidden>
+    <h2>Join a class</h2>
+    <p class="sub">Join by scanning the QR code or by entering the class ID.</p>
+
+    <div class="join-grid">
+      <!-- QR -->
+      <div class="join-panel">
+        <div class="join-title">Scan QR Code</div>
+        <p class="join-text">
+          Scan the QR code shown by your professor.
+        </p>
+        <button type="button" class="btn-glass" id="scanQrBtn">
+          <i class="bi bi-qr-code-scan"></i>
+          Scan QR
+        </button>
+      </div>
+
+      <!-- CLASS ID -->
+      <div class="join-panel">
+        <div class="join-title">Enter Class ID</div>
+        <input
+          id="classIdInput"
+          class="join-input"
+          placeholder="Class ID"
+          autocomplete="off"
+        />
+        <button type="button" class="btn-glass primary" id="joinClassBtn">
+          Join
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN CLASS STATE -->
+  <div id="inClassState" class="home-card" hidden>
+    <h2>You are currently in class </h2>
+    <p class="sub attention">Pay attention!</p>
+
+    <div class="current-class">
+      <div id="className" class="current-class__name"></div>
+      <div id="classDesc" class="current-class__desc"></div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+  <script src="~/js/student-home.js" asp-append-version="true"></script>
+}

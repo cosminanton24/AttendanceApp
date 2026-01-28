@@ -11,7 +11,7 @@
   }
   h1{ margin:0 0 6px; font-size:24px; }
   .sub{ margin:0 0 16px; color:var(--muted); font-size:13px; }
-  .field{ display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+  .field{ display:flex; flex-direction:column; gap:8px; margin:12px 0; position:relative;}
   label{ color:var(--muted); font-size:13px; }
   input{ padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.09);
     background:rgba(7,10,18,.65); color:var(--text); outline:none;
@@ -26,6 +26,10 @@
   .hint{ margin-top:12px; color:var(--muted); font-size:13px; text-align:center; }
   .hint a{ color:#60a5fa; text-decoration:none; font-weight:800; }
 
+  .card h1{
+  color: #fff !important;
+}
+
   select{
   padding:12px;
   border-radius:12px;
@@ -38,11 +42,6 @@
   -webkit-appearance:none;
   -moz-appearance:none;
   cursor:pointer;
-}
-
-/* custom dropdown arrow */
-.field{
-  position:relative;
 }
 
 .field select{
