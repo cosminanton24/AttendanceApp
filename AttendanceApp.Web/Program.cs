@@ -98,6 +98,24 @@ builder.Services.AddAuthentication(options =>
                 context.Token = token;
             }
             return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            context.HandleResponse();
+
+            var req = context.HttpContext.Request;
+            var res = context.HttpContext.Response;
+
+            if (IsBrowserHtmlRequest(req))
+            {
+                res.Redirect($"/auth/login");
+            }
+            else
+            {
+                res.StatusCode = StatusCodes.Status401Unauthorized;
+            }
+
+            return Task.CompletedTask;
         }
     };
 });
@@ -153,8 +171,26 @@ app.MapControllerRoute(
 
 await app.RunAsync();
  
- 
+static bool IsBrowserHtmlRequest(HttpRequest request)
+{
+    if (request.Headers.TryGetValue("Accept", out var accept) && accept.Any(a => a!.Contains("text/html", StringComparison.OrdinalIgnoreCase)))
+    {
+        return true;
+    }
+
+    if (request.Headers.TryGetValue("X-Requested-With", out var xrw) && xrw.Any(v => v!.Equals("XMLHttpRequest", StringComparison.OrdinalIgnoreCase)))
+    {
+         return false;
+    }
+
+    if (request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    return string.Equals(request.Method, HttpMethods.Get, StringComparison.OrdinalIgnoreCase);
+}
 namespace AttendanceApp.Web
 {
     public partial class WebHostMarker { protected WebHostMarker() { } }
 }
+
+

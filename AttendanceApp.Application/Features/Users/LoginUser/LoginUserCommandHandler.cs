@@ -20,7 +20,7 @@ public class LoginUserCommandHandler(IUserRepository _userRepo) : IRequestHandle
             throw new ValidationException($"Incorrect password for {command.Email}.");
         }
         
-        var jwt = JwtTokenGenerator.GenerateToken(user.Id.ToString(), command.Email);
+        var jwt = JwtTokenGenerator.GenerateToken(user.Id.ToString(), command.Email, user.Type);
         return Result<string>.Ok(jwt);
     }
 }

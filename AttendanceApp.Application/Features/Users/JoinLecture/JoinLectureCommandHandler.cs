@@ -18,7 +18,7 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
         var alreadyJoined = await _lectureAttendeeRepository.GetAttendeeAsync(command.LectureId, command.UserId, cancellationToken);
         if (alreadyJoined != null)
         {
-            throw new ValidationException($"User with ID {command.UserId} has already joined lecture with ID {command.LectureId}.");
+            throw new ValidationException($"User has already joined lecture with ID {command.LectureId}.");
         }
 
         var userOngoingLectures = await _lectureRepo.GetStudentLecturesAsync(command.UserId, 0, 1, null, LectureStatus.InProgress, cancellationToken);

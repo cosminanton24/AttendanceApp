@@ -181,7 +181,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         // Ensure no auth header
         _httpClient.DefaultRequestHeaders.Authorization = null;
 
-        var response = await _httpClient.GetAsync("/api/lectures/");
+        var response = await _httpClient.GetAsync("/api/lectures/student");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -261,7 +261,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         await CreateAndAuthenticateUserAsync();
 
         // Act
-        var response = await _httpClient.GetAsync("/api/lectures/");
+        var response = await _httpClient.GetAsync("/api/lectures/student");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -274,7 +274,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         await CreateAndAuthenticateUserAsync();
 
         // Act
-        var response = await _httpClient.GetAsync("/api/lectures/?status=Scheduled");
+        var response = await _httpClient.GetAsync("/api/lectures/student/?status=Scheduled");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

@@ -1,12 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using AttendanceApp.Domain.Enums;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AttendanceApp.Core.Application.Common.Jwt;
 public static class JwtTokenGenerator
 {
-    public static string GenerateToken(string userId, string userEmail, int expiresInMinutes = 60)
+    public static string GenerateToken(string userId, string userEmail, UserType userType, int expiresInMinutes = 60)
     {
         var keyVar = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "dev_only_jwt_key_at_least_32_chars_long!!";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyVar));
@@ -16,6 +17,7 @@ public static class JwtTokenGenerator
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId),
             new Claim(JwtRegisteredClaimNames.Email, userEmail),
+            new Claim(ClaimTypes.Role, userType.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

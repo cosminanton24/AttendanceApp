@@ -1,0 +1,38 @@
+@{
+    ViewData["Title"] = "Join lecture";
+    Layout = "_LectureLayout";
+
+    var lectureId = (ViewData["LectureId"]?.ToString() ?? "");
+}
+
+<div class="join-page" data-lecture-id="@lectureId">
+    <div class="join-card">
+        <div class="join-card__head">Joining lecture</div>
+
+        <div class="join-card__body">
+            <div class="join-spinner" aria-hidden="true">
+                <div class="spinner-border" aria-hidden="true"></div>
+            </div>
+
+            <output id="joinA11yStatus" class="visually-hidden" aria-live="polite">Loading</output>
+
+            <div class="join-text" id="joinStatusText">Please wait…</div>
+
+            <progress id="joinProgressA11y" class="visually-hidden" max="100"></progress>
+
+            <div class="progress join-progress" aria-label="Joining lecture">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%"></div>
+            </div>
+
+            <div class="join-result" id="joinResult" aria-live="polite"></div>
+        </div>
+
+        <div class="join-card__foot">
+            <div class="join-id">Lecture ID: <span class="join-id__value">@lectureId</span></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/lecture-join.js" asp-append-version="true"></script>
+}

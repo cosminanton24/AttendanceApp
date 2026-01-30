@@ -55,7 +55,12 @@ if (dayHead && !dayHead.querySelector(".cal-day-nav")) {
     view: new Date(),      // month being viewed
     selected: new Date(),  // selected day
     events: [],            // {id,title,description,start:Date,end:Date}
-    onOpenCb: null
+    onOpenCb: null,
+    // loadedMonths stores keys like 'YYYY-M' to prevent redundant loads
+    loadedMonths: new Set(),
+    // loadingMonths tracks in-flight month loads to avoid duplicate concurrent requests
+    loadingMonths: new Set(),
+    onViewChange: null
   };
 
   // --- helpers ---
@@ -71,12 +76,8 @@ function renderNowLine(){
   if (!elEvents) return;
 
   const ppm = getPPM();
-
-  const topPadRaw = getComputedStyle(elEvents).getPropertyValue("--top-pad")?.trim();
-  const topPad = Number.parseFloat(topPadRaw) || 0;
-
   const minutesNow = today.getHours() * 60 + today.getMinutes();
-  const y = topPad + minutesNow * ppm;
+  const y = minutesNow * ppm;
 
   if (!nowLineEl) {
     nowLineEl = document.createElement("div");
@@ -129,7 +130,20 @@ function renderNowLine(){
     pop.classList.add("open");
     pop.setAttribute("aria-hidden", "false");
     if (typeof state.onOpenCb === "function") state.onOpenCb();
+    scrollToNowIfToday();
   }
+
+  function scrollToNowIfToday(){
+  const today = new Date();
+  if (!sameDay(state.selected, today)) return;
+
+  const ppm = getPPM();
+  const minutesNow = today.getHours() * 60 + today.getMinutes();
+  const targetY = minutesNow * ppm;
+
+  const scroller = elEvents.parentElement; // .cal-timeline
+  scroller.scrollTop = Math.max(0, targetY - 120);
+}
 
   function closePopover(){
     pop.classList.remove("open");
@@ -204,6 +218,24 @@ function renderNowLine(){
 
       elGrid.appendChild(cell);
     }
+
+    // notify listener that the view changed (for lazy-loading events)
+    try {
+      // load previous, current and next months because the month grid shows days
+      const monthsToCheck = [];
+      const cur = new Date(state.view.getFullYear(), state.view.getMonth(), 1);
+      const prev = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
+      const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      monthsToCheck.push(prev, cur, next);
+
+      for (const d of monthsToCheck) {
+        const monthKey = `${d.getFullYear()}-${d.getMonth()+1}`;
+        if (typeof state.onViewChange === 'function' && !state.loadedMonths.has(monthKey) && !state.loadingMonths.has(monthKey)) {
+          state.loadingMonths.add(monthKey);
+          try { state.onViewChange(monthKey, new Date(d)); } catch (e) { console.error(e); }
+        }
+      }
+    } catch (e) { /* ignore */ }
   }
 
   // --- day render (Outlook-ish) ---
@@ -213,11 +245,7 @@ function renderNowLine(){
     elHours.innerHTML = "";
     elEvents.innerHTML = "";
 
-    const topPadRaw = getComputedStyle(elEvents)
-    .getPropertyValue("--top-pad").trim();
-    const topPad = Number.parseFloat(topPadRaw) || 0;
-
-    const ppm = getPPM();           // pixels per minute (responsive via CSS)
+    const ppm = getPPM();
     const minutesInDay = 24 * 60;
 
     // Hour labels every 2 hours
@@ -225,7 +253,8 @@ function renderNowLine(){
       const label = document.createElement("div");
       label.className = "cal-hour";
       label.textContent = `${pad2(h)}:00`;
-      label.style.top = `${(h == 0 ? topPad : 0) + h * 60 * ppm}px`;
+      label.style.top = `${h * 60 * ppm}px`;
+      if (h === 0) label.style.transform = "translateY(6px)";
       if (h % 2 === 1) label.classList.add("odd");
       elHours.appendChild(label);
     }
@@ -253,13 +282,45 @@ function renderNowLine(){
       block.style.height = `${dur * ppm}px`;
 
       block.innerHTML = `
-        <div class="t">${escapeHtml(ev.title)}</div>
+          <div class="cal-event-head">
+          <div class="t">${escapeHtml(ev.title)}</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+            <div class="time">${formatTime(ev.start)} – ${formatTime(ev.end)}</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="event-status-pill" data-ev-id="${escapeHtml(ev.id)}"></div>
+            </div>
+          </div>
+         </div>
         <div class="d">${escapeHtml(ev.description || "")}</div>
-        <div class="time">${formatTime(ev.start)} – ${formatTime(ev.end)}</div>
       `;
 
-      // prevent closing when clicking an event
-      block.addEventListener("click", (e) => e.stopPropagation());
+      // set status on the indicator if available
+      try {
+        const statusVal = (window._lectureStatusMap && window._lectureStatusMap[ev.id] !== undefined) ? window._lectureStatusMap[ev.id] : (ev.status ?? ev.Status);
+        const pill = block.querySelector('.event-status-pill');
+        let label = '';
+        if (pill) {
+          pill.classList.remove('status-scheduled','status-inprogress','status-ended','status-canceled');
+          if (String(statusVal).toLowerCase() === 'scheduled' || statusVal === 0) { pill.classList.add('status-scheduled'); label = 'Scheduled'; }
+          else if (String(statusVal).toLowerCase() === 'inprogress' || statusVal === 1) { pill.classList.add('status-inprogress'); label = 'InProgress'; }
+          else if (String(statusVal).toLowerCase() === 'ended' || statusVal === 2) { pill.classList.add('status-ended'); label = 'Ended'; }
+          else if (String(statusVal).toLowerCase() === 'canceled' || statusVal === 3) { pill.classList.add('status-canceled'); label = 'Canceled'; }
+          pill.textContent = label;
+        }
+      } catch (e) { /* ignore */ }
+
+      // prevent closing when clicking an event and notify external handler
+      block.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try {
+          // tag DOM node with event id for external positioning
+          block.dataset.eventId = ev.id;
+          if (typeof window.onCalendarEventClick === 'function') {
+            window.onCalendarEventClick(ev);
+            return;
+          }
+        } catch (err) { console.error(err); }
+      });
 
       elEvents.appendChild(block);
     });
@@ -290,9 +351,30 @@ function renderNowLine(){
       return window.AttendanceCalendar.addEvent({ title, description, start: s, end: e });
     },
 
-    addEvent: ({ id, title, description, start, end }) => {
+    addEvent: ({ id, title, description, start, end, status }) => {
       const s = (start instanceof Date) ? start : new Date(start);
       const e = (end instanceof Date) ? end : new Date(end);
+
+      // Upsert by id to prevent duplicates when month loaders re-fetch
+      const incomingId = (id !== undefined && id !== null) ? String(id) : null;
+      if (incomingId) {
+        const existingIndex = state.events.findIndex(x => String(x.id) === incomingId);
+        if (existingIndex >= 0) {
+          const existing = state.events[existingIndex];
+          existing.title = title ?? existing.title ?? 'Untitled';
+          existing.description = description ?? existing.description ?? '';
+          existing.start = s;
+          existing.end = e;
+          if (status !== undefined) existing.status = status;
+
+          // store status in global map for other scripts to read
+          try { window._lectureStatusMap = window._lectureStatusMap || {}; if (incomingId && existing.status !== undefined) window._lectureStatusMap[incomingId] = existing.status; } catch (err) {}
+
+          renderMonth();
+          renderDay();
+          return incomingId;
+        }
+      }
 
       const ev = {
         id: id ?? (crypto.randomUUID?.() ?? String(Date.now() + Math.random())),
@@ -302,11 +384,25 @@ function renderNowLine(){
         end: e
       };
 
+      if (status !== undefined) ev.status = status;
+
       state.events.push(ev);
+      // store status in global map for other scripts to read
+      try { window._lectureStatusMap = window._lectureStatusMap || {}; if (ev.id && ev.status !== undefined) window._lectureStatusMap[ev.id] = ev.status; } catch(e){}
       renderMonth();
       renderDay();
       return ev.id;
     },
+
+    // register a callback invoked when the month view changes for an unloaded month
+    onViewChange: (fn) => { state.onViewChange = fn; },
+
+    // mark month as loaded so the calendar won't request it again (and clear in-flight)
+    markMonthLoaded: (monthKey) => { try { state.loadingMonths.delete(monthKey); state.loadedMonths.add(monthKey); } catch(e){} },
+    // mark month as in-flight loading
+    markMonthLoading: (monthKey) => { try { state.loadingMonths.add(monthKey); } catch(e){} },
+    // return true if month is already fully loaded (not merely loading)
+    isMonthLoaded: (monthKey) => { try { return state.loadedMonths.has(monthKey); } catch(e){ return false; } },
 
     clearEvents: () => {
       state.events = [];
@@ -360,49 +456,6 @@ function renderNowLine(){
 
   // ---- DEMO EVENTS (for visual testing) ----
 
-// Morning class
-AttendanceCalendar.addTimespan({
-  title: "Math Lecture",
-  description: "Room 204",
-  start: new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    9, 0
-  ),
-  minutes: 90
-});
-
-// Lunch break
-AttendanceCalendar.addTimespan({
-  title: "Lunch",
-  description: "Cafeteria",
-  start: new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    12, 30
-  ),
-  minutes: 60
-});
-
-// Afternoon meeting
-AttendanceCalendar.addEvent({
-  title: "Team Sync",
-  description: "Weekly planning",
-  start: new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    15, 0
-  ),
-  end: new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    16, 15
-  )
-});
 setInterval(() => {
   renderNowLine();
 }, 60 * 1000); // update every minute

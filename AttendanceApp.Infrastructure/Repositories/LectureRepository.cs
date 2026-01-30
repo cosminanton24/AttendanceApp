@@ -12,18 +12,21 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
 
     public async Task<IReadOnlyList<Lecture>> GetProfessorLecturesAsync(Guid professorId, int pageNumber, int pageSize, DateTime? fromDate = null, CancellationToken cancellationToken = default)
     {
+        pageNumber = Math.Max(pageNumber, 0);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        
         var query = _dbSet
             .Where(lecture => lecture.ProfessorId == professorId);
 
         if (fromDate.HasValue)
         {
-            query = query.Where(lecture => lecture.StartTime >= fromDate.Value);
+            query = query.Where(lecture => lecture.StartTime.Month == fromDate.Value.Month && lecture.StartTime.Year == fromDate.Value.Year);
         }
 
         var lectures = query
             .Include(l => l.Attendees)
             .OrderByDescending(lecture => lecture.StartTime)
-            .Skip((pageNumber - 1) * pageSize)
+            .Skip(pageNumber * pageSize)
             .Take(pageSize);
 
         return await lectures.ToListAsync(cancellationToken);
@@ -37,7 +40,7 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
         LectureStatus? status = null, 
         CancellationToken cancellationToken = default)
     {
-        pageNumber = Math.Max(pageNumber, 1);
+        pageNumber = Math.Max(pageNumber, 0);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var query = db.Lectures
@@ -59,7 +62,7 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
         return await query
             .OrderByDescending(l => l.StartTime)
             .ThenBy(l => l.Id)
-            .Skip((pageNumber - 1) * pageSize)
+            .Skip(pageNumber * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }

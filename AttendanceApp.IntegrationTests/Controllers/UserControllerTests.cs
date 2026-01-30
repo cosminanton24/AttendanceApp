@@ -209,4 +209,44 @@ public sealed class UserControllerIntegrationTests : IAsyncLifetime
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    private sealed record UserInfoDto(Guid Id, string Name, string Email);
+
+    [Fact]
+    public async Task GetUserInfo_WithoutAuth_ReturnsUnauthorized()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+
+        var someId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/users/userInfo?ids={someId}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetUserInfo_WithValidAuth_AndMultipleIds_ReturnsDtos()
+    {
+        // Arrange
+        var (currentUserId, _) = await CreateAndAuthenticateUserAsync();
+        var otherUserId = await RegisterUserAsync("Other", userType: UserType.Student);
+
+        // Act
+        var response = await _httpClient.GetAsync($"/api/users/userInfo?ids={currentUserId}&ids={otherUserId}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var items = await response.Content.ReadFromJsonAsync<List<UserInfoDto>>();
+        Assert.NotNull(items);
+        Assert.Equal(2, items!.Count);
+
+        var ids = items.Select(x => x.Id).ToHashSet();
+        Assert.Contains(currentUserId, ids);
+        Assert.Contains(otherUserId, ids);
+        Assert.All(items, x =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(x.Name));
+            Assert.False(string.IsNullOrWhiteSpace(x.Email));
+        });
+    }
 }

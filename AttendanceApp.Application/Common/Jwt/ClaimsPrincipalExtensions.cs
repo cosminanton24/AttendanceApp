@@ -1,6 +1,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using AttendanceApp.Domain.Enums;
 
 namespace AttendanceApp.Application.Common.Jwt;
 
@@ -18,5 +19,18 @@ public static class ClaimsPrincipalExtensions
             throw new UnauthorizedAccessException("Invalid user id claim.");
 
         return guid;
+    }
+
+    public static UserType GetUserType(this ClaimsPrincipal user)
+    {
+        var role = user.FindFirstValue(ClaimTypes.Role);
+
+        if (string.IsNullOrWhiteSpace(role))
+            throw new UnauthorizedAccessException("Missing user type claim.");
+
+        if (!Enum.TryParse<UserType>(role, out var userType))
+            throw new UnauthorizedAccessException("Invalid user type claim.");
+
+        return userType;
     }
 }

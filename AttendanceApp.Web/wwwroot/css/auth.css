@@ -21,7 +21,7 @@
     font-weight:800; color:#071022; background:linear-gradient(90deg,#3b82f6,#60a5fa);
   }
   .err{ margin:10px 0; padding:10px; border-radius:12px; border:1px solid rgba(96,165,250,.35);
-    background:rgba(59,130,246,.12);
+    background:rgba(59,130,246,.12); color: white !important;
   }
   .hint{ margin-top:12px; color:var(--muted); font-size:13px; text-align:center; }
   .hint a{ color:#60a5fa; text-decoration:none; font-weight:800; }
@@ -29,6 +29,7 @@
   .card h1{
   color: #fff !important;
 }
+
 
   select{
   padding:12px;

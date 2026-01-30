@@ -35,11 +35,13 @@
     }
     else if (Model.UserType == UserType.Professor)
     {
-        <partial name="_ProfessorHome" />
+        @await Html.PartialAsync("_ProfessorHome")
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+        <script src="~/js/professor-home.js" asp-append-version="true"></script>
     }
     else if (Model.UserType == UserType.Admin)
     {
-        <partial name="_AdminHome" />
+        @await Html.PartialAsync("_AdminHome")
     }
     else
     {
@@ -74,7 +76,6 @@
       </div>
       <div class="cal-grid" data-cal-grid></div>
     </div>
-
     <!-- Day timeline -->
     <div class="cal-day">
       <div class="cal-day-head">
@@ -83,6 +84,31 @@
       <div class="cal-timeline">
         <div class="cal-hours" data-cal-hours></div>
         <div class="cal-events" data-cal-events></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lecture action modal -->
+<div class="modal fade" id="lectureActionModal" tabindex="-1" aria-labelledby="lectureActionModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="lectureActionModalLabel">Lecture</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="lectureInfo">
+          <p><strong id="lecTitle">Title</strong></p>
+          <p id="lecTime" class="small text-muted"></p>
+          <p id="lecDesc" class="small"></p>
+          <p>Current status: <span id="lecStatus" class="small"></span></p>
+        </div>
+        <div id="lectureActionFeedback" class="form-feedback" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <div id="lectureActionButtons" class="d-flex gap-2"></div>
+        <button type="button" class="btn-inline" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>

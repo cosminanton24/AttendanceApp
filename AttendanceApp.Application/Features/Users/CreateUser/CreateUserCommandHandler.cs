@@ -4,6 +4,7 @@ using AttendanceApp.Application.Common.Results;
 using AttendanceApp.Domain.Repositories;
 using AttendanceApp.Domain.Users;
 using MediatR;
+using System.ComponentModel.DataAnnotations;
 
 namespace AttendanceApp.Application.Features.Users.CreateUser;
 
@@ -11,6 +12,10 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
 {
     public async Task<Result<Guid>> Handle(CreateUserCommand command, CancellationToken cancellationToken)
     {       
+        var existing = await _userRepo.GetByEmailAsync(command.Email, cancellationToken);
+        if (existing is not null)
+            throw new ValidationException($"Email {command.Email} is already in use.");
+
         var hashedPassword = await PasswordHasher.HashPasswordAsync(command.Password);
 
         var newUserId = Guid.NewGuid();
@@ -21,10 +26,10 @@ public class CreateUserCommandHandler(IUserRepository _userRepo) : IRequestHandl
             command.Email,
             hashedPassword
         );
-        
+
         await _userRepo.AddAsync(newUser, cancellationToken);
         await _userRepo.SaveChangesAsync(cancellationToken);
-        
+
         return Result<Guid>.Created(newUserId);
     }
 }

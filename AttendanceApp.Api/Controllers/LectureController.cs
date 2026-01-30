@@ -41,6 +41,20 @@ public class LectureController(IMediator mediator) : ControllerBase
     }
 
     [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMyLectures(
+        [FromQuery] int page = 0,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] int? fromMonthsAgo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = User.GetUserId();
+        var command = new GetProfessorLecturesQuery(userId, page, pageSize, fromMonthsAgo);
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
     [HttpPost("join/{lectureId:guid}")]
     public async Task<IActionResult> JoinLecture([FromRoute] Guid lectureId, CancellationToken cancellationToken)
     {
@@ -51,7 +65,7 @@ public class LectureController(IMediator mediator) : ControllerBase
     }
 
     [Authorize]
-    [HttpGet]
+    [HttpGet("student")]
     public async Task<IActionResult> GetStudentLectures(
         [FromQuery] int page = 0,
         [FromQuery] int pageSize = 20,

@@ -42,6 +42,21 @@
       <div id="className" class="current-class__name"></div>
       <div id="classDesc" class="current-class__desc"></div>
     </div>
+
+    <div class="student-lecture-progress" aria-label="Lecture progress">
+      <div class="student-lecture-progress__head">
+        <div>
+          <div class="student-lecture-progress__title">Lecture progress</div>
+          <div id="studentLectureTimeRange" class="student-lecture-progress__time"></div>
+        </div>
+        <div id="studentLectureRemaining" class="student-lecture-progress__remaining"></div>
+      </div>
+
+      <div id="studentLectureProgressTrack" class="student-lecture-progress__track" role="progressbar" aria-label="Lecture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="studentLectureProgressFill" class="student-lecture-progress__fill" aria-hidden="true"></div>
+        <div id="studentLectureNowLine" class="student-lecture-progress__now" aria-hidden="true"></div>
+      </div>
+    </div>
   </div>
 </div>
 

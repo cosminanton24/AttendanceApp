@@ -2,6 +2,7 @@ using AttendanceApp.Api.Common;
 using AttendanceApp.Api.Common.Requests.Users;
 using AttendanceApp.Application.Common.Jwt;
 using AttendanceApp.Application.Features.Users.GetFollowState;
+using AttendanceApp.Application.Features.Users.GetUserInfoBatch;
 using AttendanceApp.Application.Features.Users.ToggleFollowUser;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -57,6 +58,15 @@ public class UserController(IMediator mediator) : ControllerBase
         var userId = User.GetUserId();
         var command = new ToggleFollowUserCommand(userId, profId);
         var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("userInfo")]
+    public async Task<IActionResult> GetUserInfo([FromQuery] Guid[] ids, CancellationToken cancellationToken)
+    {
+        var query = new GetUserInfoBatchQuery(ids);
+        var result = await mediator.Send(query, cancellationToken);
         return this.ToActionResult(result);
     }
 }

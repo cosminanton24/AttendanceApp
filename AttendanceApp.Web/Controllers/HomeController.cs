@@ -1,3 +1,4 @@
+using AttendanceApp.Application.Common.Jwt;
 using AttendanceApp.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,11 +9,13 @@ namespace AttendanceApp.Web.Controllers;
 public class HomeController : Controller
 {
     [HttpGet("index")]
-    public IActionResult Index()
+    [Authorize]
+    public async Task<IActionResult> Index()
     {
+        var userType = User.GetUserType();
         var model = new Models.HomeViewModel
         {
-                UserType = UserType.Student
+            UserType = userType
         };
         return View(model);
     }
