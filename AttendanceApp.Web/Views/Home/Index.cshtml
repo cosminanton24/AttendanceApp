@@ -16,14 +16,25 @@
         <!-- Calendar button -->
         <button id="calendarBtn" class="calendar-btn" aria-label="Calendar" type="button">Calendar</button>
         <!-- Search -->
-        <input type="search"
-               class="nav-search"
-               placeholder="Search" />
+        <div class="search-container">
+            <input type="search"
+                   id="userSearch"
+                   class="nav-search"
+                   placeholder="Search users..."
+                   autocomplete="off" />
+            <div id="searchResults" class="search-results" aria-hidden="true"></div>
+        </div>
 
         <!-- Profile button -->
-        <button class="profile-btn" aria-label="Profile">
-            <i class="bi bi-person"></i>
-        </button>
+        @{
+            var parts = Model.UserName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var initials = parts.Length >= 2 
+                ? $"{parts[0][0]}{parts[^1][0]}" 
+                : Model.UserName.Length > 0 ? Model.UserName[0].ToString() : "?";
+        }
+        <a href="/profile/me" class="profile-btn" aria-label="Profile">
+            <span class="profile-initials">@initials.ToUpper()</span>
+        </a>
     </div>
 </nav>
 

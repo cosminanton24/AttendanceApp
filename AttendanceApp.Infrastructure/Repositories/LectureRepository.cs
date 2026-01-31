@@ -32,6 +32,22 @@ public class LectureRepository(AttendanceAppDbContext db) : GenericRepository<Le
         return await lectures.ToListAsync(cancellationToken);
     }
 
+    public async Task<bool> HasProfessorConflictingLectureAsync(Guid professorId, DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default)
+    {
+        var potentialConflicts = await _dbSet
+            .Where(lecture =>
+                lecture.ProfessorId == professorId &&
+                lecture.StartTime < endTime &&
+                lecture.StartTime >= startTime.AddDays(-1))
+            .ToListAsync(cancellationToken);
+
+        return potentialConflicts.Any(lecture =>
+        {
+            var lectureEnd = lecture.StartTime.Add(lecture.Duration);
+            return startTime < lectureEnd && endTime > lecture.StartTime;
+        });
+    }
+
     public async Task<IReadOnlyList<Lecture>> GetStudentLecturesAsync(
         Guid userId, 
         int pageNumber, 

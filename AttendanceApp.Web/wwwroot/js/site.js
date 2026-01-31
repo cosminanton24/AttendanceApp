@@ -1,4 +1,12 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-// for details on configuring this project to bundle and minify static web assets.
+﻿/**
+ * @fileoverview Site-wide JavaScript utilities and configuration.
+ * @see https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
+ */
 
-// Write your JavaScript code.
+'use strict';
+
+/**
+ * Global namespace for AttendanceApp utilities.
+ * @namespace
+ */
+globalThis.AttendanceApp = globalThis.AttendanceApp || {};

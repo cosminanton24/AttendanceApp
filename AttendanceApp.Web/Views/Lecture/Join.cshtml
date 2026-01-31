@@ -3,9 +3,10 @@
     Layout = "_LectureLayout";
 
     var lectureId = (ViewData["LectureId"]?.ToString() ?? "");
+    var isLectureIdValid = (ViewData["IsLectureIdValid"] as bool?) ?? false;
 }
 
-<div class="join-page" data-lecture-id="@lectureId">
+<div class="join-page" data-lecture-id="@lectureId" data-lecture-id-valid="@isLectureIdValid.ToString().ToLowerInvariant()">
     <div class="join-card">
         <div class="join-card__head">Joining lecture</div>
 
@@ -25,6 +26,10 @@
             </div>
 
             <div class="join-result" id="joinResult" aria-live="polite"></div>
+
+            <div class="join-actions" id="joinActions" hidden>
+                <a class="btn-glass" href="/home/index" id="backHomeBtn">Back home</a>
+            </div>
         </div>
 
         <div class="join-card__foot">

@@ -33,8 +33,8 @@ public sealed class GetLectureAttendeesQueryHandler(
         if (requester.Type == UserType.Professor && lecture.ProfessorId != requester.Id)
             throw new ValidationException("User is not authorized to view attendees for this lecture.");
 
-        var total = await lectureAttendeeRepository.GetTotalAttendeesAsync(request.LectureId, cancellationToken);
-        var attendees = await lectureAttendeeRepository.GetLectureAttendeesAsync(request.LectureId, request.Page, request.PageSize, cancellationToken);
+        var total = await lectureAttendeeRepository.GetTotalAttendeesAsync(request.LectureId, request.SearchFilter, cancellationToken);
+        var attendees = await lectureAttendeeRepository.GetLectureAttendeesAsync(request.LectureId, request.Page, request.PageSize, request.SearchFilter, cancellationToken);
 
         var items = attendees
             .Select(a => new LectureAttendeeDto(a.UserId, a.TimeJoined))

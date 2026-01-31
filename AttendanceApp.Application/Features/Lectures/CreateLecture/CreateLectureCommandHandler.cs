@@ -16,7 +16,12 @@ public class CreateLectureCommandHandler(ILectureRepository _lectureRepo, IUserR
 
         if(user.Type == UserType.Student)
         {
-            throw new ValidationException($"User with id {command.ProfessorId} is not authorized to create a lecture.");
+            throw new ValidationException($"User is not authorized to create a lecture.");
+        }
+        
+        if(await _lectureRepo.HasProfessorConflictingLectureAsync(user.Id, command.StartTime, command.StartTime.Add(command.Duration), cancellationToken))
+        {
+            throw new ValidationException("You have a conflicting lecture scheduled during this time.");
         }
 
         var newLectureId = Guid.NewGuid();

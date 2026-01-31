@@ -6,11 +6,11 @@ namespace AttendanceApp.Api.Common.Requests.Lectures;
 public sealed record CreateLectureRequest()
 {
     [JsonRequired]
-    [StringLength(100)]
+    [StringLength(25)]
     public string Name { get; init; } = default!;
 
     [JsonRequired]
-    [StringLength(500)]
+    [StringLength(150)]
     public string Description { get; init; } = default!;
 
     [JsonRequired]

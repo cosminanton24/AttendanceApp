@@ -115,12 +115,12 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         DateTime? startTime = null,
         TimeSpan? duration = null)
     {
-        var lectureName = $"{name}_{Guid.NewGuid():N}";
+        var lectureName = $"{name}";
         var lectureBody = new CreateLectureRequest
         {
             Name = lectureName,
             Description = description,
-            StartTime = startTime ?? DateTime.UtcNow.AddHours(1),
+            StartTime = startTime ?? DateTime.UtcNow.AddMinutes(10),
             Duration = duration ?? TimeSpan.FromHours(1)
         };
 
@@ -210,7 +210,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
 
         var lectureBody = new CreateLectureRequest
         {
-            Name = $"Test Lecture {Guid.NewGuid():N}",
+            Name = $"Test Lecture",
             Description = "Test Description",
             StartTime = DateTime.UtcNow.AddHours(1),
             Duration = TimeSpan.FromHours(1)
@@ -377,12 +377,16 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
     {
         // Arrange: create and authenticate user, create lecture
         await CreateAndAuthenticateUserAsync(UserType.Professor);
-        var lectureId = await CreateLectureAsync();
+        var lectureId = await CreateLectureAsync(startTime: DateTime.UtcNow.AddMinutes(1), duration: TimeSpan.FromMinutes(1));
 
-        var statusBody = new UpdateLectureStatusRequest { Status = LectureStatus.Ended };
+        var firstStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
+        var secondStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.Ended };
 
         // Act
-        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", statusBody);
+        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", firstStatusBody);
+        response.EnsureSuccessStatusCode();
+        response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", secondStatusBody);
+        response.EnsureSuccessStatusCode();
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

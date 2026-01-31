@@ -7,28 +7,51 @@ namespace AttendanceApp.Infrastructure.Repositories;
 
 public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepository<LectureAttendee>(db), ILectureAttendeeRepository
 {
+    private readonly AttendanceAppDbContext _context = db;
+
     public async Task<LectureAttendee?> GetAttendeeAsync(Guid lectureId, Guid userId, CancellationToken cancellationToken = default)
     {
         return await _dbSet.FirstOrDefaultAsync(la => la.LectureId == lectureId && la.UserId == userId, cancellationToken);
     }
 
-    public async Task<int> GetTotalAttendeesAsync(Guid lectureId, CancellationToken cancellationToken = default)
+    public async Task<int> GetTotalAttendeesAsync(Guid lectureId, string? searchFilter = null, CancellationToken cancellationToken = default)
     {
-        return await _dbSet.AsNoTracking().CountAsync(x => x.LectureId == lectureId, cancellationToken);
+        var query = _dbSet.AsNoTracking().Where(x => x.LectureId == lectureId);
+
+        if (!string.IsNullOrWhiteSpace(searchFilter))
+        {
+            var filter = searchFilter.Trim().ToLower();
+            query = query.Where(a => 
+                _context.Users.Any(u => 
+                    u.Id == a.UserId && 
+                    (u.Name.ToLower().Contains(filter) || u.Email.ToLower().Contains(filter))));
+        }
+
+        return await query.CountAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<LectureAttendee>> GetLectureAttendeesAsync(
         Guid lectureId,
         int page,
         int pageSize,
+        string? searchFilter = null,
         CancellationToken cancellationToken = default)
     {
         if (page < 0) page = 0;
         if (pageSize <= 0) pageSize = 20;
 
-        return await _dbSet
-            .AsNoTracking()
-            .Where(x => x.LectureId == lectureId)
+        var query = _dbSet.AsNoTracking().Where(x => x.LectureId == lectureId);
+
+        if (!string.IsNullOrWhiteSpace(searchFilter))
+        {
+            var filter = searchFilter.Trim().ToLower();
+            query = query.Where(a => 
+                _context.Users.Any(u => 
+                    u.Id == a.UserId && 
+                    (u.Name.ToLower().Contains(filter) || u.Email.ToLower().Contains(filter))));
+        }
+
+        return await query
             .OrderBy(x => x.TimeJoined)
             .Skip(page * pageSize)
             .Take(pageSize)

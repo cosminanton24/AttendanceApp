@@ -1,6 +1,7 @@
 using AttendanceApp.Api.Common;
 using AttendanceApp.Api.Common.Requests.Lectures;
 using AttendanceApp.Application.Common.Jwt;
+using AttendanceApp.Application.Features.Lectures.DeleteLecture;
 using AttendanceApp.Application.Features.Lectures.GetProfessorLectures;
 using AttendanceApp.Application.Features.Lectures.GetStudentLectures;
 using AttendanceApp.Application.Features.Users.JoinLecture;
@@ -86,6 +87,16 @@ public class LectureController(IMediator mediator) : ControllerBase
     {
         var userId = User.GetUserId();
         var command = UpdateLectureStatusRequestToCommand.ToCommand(userId, lectureId, request);
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpDelete("{lectureId:guid}")]
+    public async Task<IActionResult> DeleteLecture([FromRoute] Guid lectureId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var command = new DeleteLectureCommand(userId, lectureId);
         var result = await mediator.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }

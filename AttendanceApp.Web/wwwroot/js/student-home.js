@@ -1,333 +1,737 @@
+/**
+ * @fileoverview Student home page functionality.
+ * Handles lecture joining, active lecture display, and calendar integration.
+ */
+
+'use strict';
+
 (function () {
-  const joinState = document.getElementById('joinState');
-  const inClassState = document.getElementById('inClassState');
-  const classNameEl = document.getElementById('className');
-  const classDescEl = document.getElementById('classDesc');
+  // ============================================================================
+  // Constants
+  // ============================================================================
 
-  const timeRangeEl = document.getElementById('studentLectureTimeRange');
-  const remainingEl = document.getElementById('studentLectureRemaining');
-  const trackEl = document.getElementById('studentLectureProgressTrack');
-  const fillEl = document.getElementById('studentLectureProgressFill');
-  const nowLineEl = document.getElementById('studentLectureNowLine');
+  /** Progress update interval in milliseconds */
+  const PROGRESS_UPDATE_INTERVAL_MS = 15000;
 
-  const joinBtn = document.getElementById('joinClassBtn');
-  const classIdInput = document.getElementById('classIdInput');
+  /** Default lecture duration in minutes */
+  const DEFAULT_DURATION_MINUTES = 60;
 
-  if (!joinState || !inClassState || !classNameEl || !classDescEl) return;
+  /** Milliseconds per minute */
+  const MS_PER_MINUTE = 60 * 1000;
 
-  let lectureProgressTimer = null;
-  let activeLectureWindow = null; // { start: Date, end: Date }
+  /** Maximum checks for calendar availability */
+  const CALENDAR_MAX_CHECKS = 200;
 
-  // Map to track lecture statuses by id for calendar pills (shared with calendar renderer)
-  window._lectureStatusMap = window._lectureStatusMap || {};
+  /** Interval between calendar availability checks in milliseconds */
+  const CALENDAR_CHECK_INTERVAL_MS = 50;
 
-  function showJoin() {
-    joinState.hidden = false;
-    inClassState.hidden = true;
+  /** Lecture status values */
+  const LectureStatus = Object.freeze({
+    IN_PROGRESS: 1,
+    IN_PROGRESS_STRING: 'inprogress',
+    IN_PROGRESS_DISPLAY: 'in progress'
+  });
 
-    activeLectureWindow = null;
-    if (lectureProgressTimer) {
-      clearInterval(lectureProgressTimer);
-      lectureProgressTimer = null;
+  /** API endpoint candidates for fetching student lectures */
+  const API_ENDPOINTS = Object.freeze([
+    '/api/lectures/student',
+    '/api/lectrues/student',
+    '/api/lectures'
+  ]);
+
+  // ============================================================================
+  // State
+  // ============================================================================
+
+  const state = {
+    lectureProgressTimer: null,
+    activeLectureWindow: null
+  };
+
+  // Initialize global status map for calendar pills
+  globalThis._lectureStatusMap = globalThis._lectureStatusMap || {};
+
+  // ============================================================================
+  // DOM Elements
+  // ============================================================================
+
+  const elements = {
+    joinState: document.getElementById('joinState'),
+    inClassState: document.getElementById('inClassState'),
+    className: document.getElementById('className'),
+    classDesc: document.getElementById('classDesc'),
+    timeRange: document.getElementById('studentLectureTimeRange'),
+    remaining: document.getElementById('studentLectureRemaining'),
+    track: document.getElementById('studentLectureProgressTrack'),
+    fill: document.getElementById('studentLectureProgressFill'),
+    nowLine: document.getElementById('studentLectureNowLine'),
+    joinBtn: document.getElementById('joinClassBtn'),
+    classIdInput: document.getElementById('classIdInput')
+  };
+
+  // Early exit if required elements are missing
+  if (!elements.joinState || !elements.inClassState || !elements.className || !elements.classDesc) {
+    return;
+  }
+
+  // ============================================================================
+  // Utility Functions
+  // ============================================================================
+
+  /**
+   * Safely sets an attribute on an element.
+   * @param {HTMLElement|null} element - The target element.
+   * @param {string} name - The attribute name.
+   * @param {string} value - The attribute value.
+   */
+  function safeSetAttribute(element, name, value) {
+    if (element) {
+      try {
+        element.setAttribute(name, value);
+      } catch {
+        // Element may not support the attribute
+      }
     }
   }
 
-  function getLectureTimeWindow(item) {
-    const startRaw = item?.startTime ?? item?.StartTime ?? null;
-    const endRaw = item?.endTime ?? item?.EndTime ?? null;
-    const duration = item?.duration ?? item?.Duration ?? null;
-
-    if (!startRaw) return null;
-    const start = new Date(startRaw);
-    if (Number.isNaN(start.getTime())) return null;
-
-    if (endRaw) {
-      const end = new Date(endRaw);
-      if (!Number.isNaN(end.getTime())) return { start, end };
+  /**
+   * Normalizes a status value to a comparable format.
+   * @param {number|string|null} status - The status value to normalize.
+   * @returns {number|string|null} The normalized status.
+   */
+  function normalizeStatus(status) {
+    if (status == null) {
+      return null;
     }
-
-    const minutes = parseDurationToMinutes(duration);
-    const end = new Date(start.getTime() + (minutes * 60 * 1000));
-    return { start, end };
+    if (typeof status === 'number') {
+      return status;
+    }
+    return String(status).trim().toLowerCase();
   }
 
+  /**
+   * Checks if a lecture status indicates an active/in-progress lecture.
+   * @param {number|string|null} status - The status to check.
+   * @returns {boolean} True if the lecture is active.
+   */
+  function isActiveLectureStatus(status) {
+    const normalized = normalizeStatus(status);
+    return normalized === LectureStatus.IN_PROGRESS ||
+           normalized === LectureStatus.IN_PROGRESS_STRING ||
+           normalized === LectureStatus.IN_PROGRESS_DISPLAY;
+  }
+
+  /**
+   * Gets a property from an item with case-insensitive fallback.
+   * @param {Object} item - The item object.
+   * @param {string} propLower - The lowercase property name.
+   * @param {string} propUpper - The uppercase property name.
+   * @param {*} defaultValue - The default value if not found.
+   * @returns {*} The property value or default.
+   */
+  function getItemProperty(item, propLower, propUpper, defaultValue = null) {
+    return item?.[propLower] ?? item?.[propUpper] ?? defaultValue;
+  }
+
+  // ============================================================================
+  // Duration Parsing
+  // ============================================================================
+
+  /**
+   * Parses ISO 8601 duration format (e.g., PT1H30M).
+   * @param {string} input - The duration string in uppercase.
+   * @returns {number} The duration in minutes.
+   */
+  function parseIsoDuration(input) {
+    const hours = Number((input.match(/(\d+)H/) || [0, 0])[1] || 0);
+    const minutes = Number((input.match(/(\d+)M/) || [0, 0])[1] || 0);
+    const seconds = Number((input.match(/(\d+)S/) || [0, 0])[1] || 0);
+    return hours * 60 + minutes + Math.round(seconds / 60);
+  }
+
+  /**
+   * Parses a duration input into minutes.
+   * Supports formats: ISO 8601 (PT1H30M), HH:MM:SS, HH:MM, 1h30m, 90m, 90.
+   * @param {number|string|null} input - The duration input.
+   * @returns {number} The duration in minutes.
+   */
+  function parseDurationToMinutes(input) {
+    if (input == null) {
+      return DEFAULT_DURATION_MINUTES;
+    }
+
+    if (typeof input === 'number') {
+      return Math.max(0, Math.floor(input));
+    }
+
+    const str = String(input).trim();
+
+    // ISO 8601 duration (PT1H30M)
+    if (/^P/i.test(str)) {
+      return parseIsoDuration(str.toUpperCase());
+    }
+
+    // HH:MM:SS format
+    const hhmmssMatch = str.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hhmmssMatch) {
+      return Number(hhmmssMatch[1]) * 60 + Number(hhmmssMatch[2]) + Math.round(Number(hhmmssMatch[3]) / 60);
+    }
+
+    // HH:MM format
+    const hhmmMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+    if (hhmmMatch) {
+      return Number(hhmmMatch[1]) * 60 + Number(hhmmMatch[2]);
+    }
+
+    // 1h30m or 1h format
+    const hmMatch = str.match(/^(\d+)h(?:([0-9]+)m)?$/i);
+    if (hmMatch) {
+      return Number(hmMatch[1]) * 60 + Number(hmMatch[2] || 0);
+    }
+
+    // Minutes only (90 or 90m)
+    const minsMatch = str.match(/^(\d+)(?:m)?$/i);
+    if (minsMatch) {
+      return Number(minsMatch[1]);
+    }
+
+    return DEFAULT_DURATION_MINUTES;
+  }
+
+  // ============================================================================
+  // Time Formatting
+  // ============================================================================
+
+  /**
+   * Formats a time range as a string.
+   * @param {Date} start - The start time.
+   * @param {Date} end - The end time.
+   * @returns {string} The formatted time range.
+   */
   function formatTimeRange(start, end) {
     try {
-      const s = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const e = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return `${s} – ${e}`;
-    } catch (e) {
+      const options = { hour: '2-digit', minute: '2-digit' };
+      const startStr = start.toLocaleTimeString([], options);
+      const endStr = end.toLocaleTimeString([], options);
+      return `${startStr} – ${endStr}`;
+    } catch {
       return '';
     }
   }
 
+  /**
+   * Converts minutes to a human-readable string.
+   * @param {number} mins - The number of minutes.
+   * @returns {string} The humanized duration (e.g., "1h 30m").
+   */
   function humanizeMinutes(mins) {
-    const m = Math.max(0, Math.round(mins));
-    if (m < 60) return `${m}m`;
-    const h = Math.floor(m / 60);
-    const rem = m % 60;
-    return rem ? `${h}h ${rem}m` : `${h}h`;
+    const totalMinutes = Math.max(0, Math.round(mins));
+
+    if (totalMinutes < 60) {
+      return `${totalMinutes}m`;
+    }
+
+    const hours = Math.floor(totalMinutes / 60);
+    const remainingMinutes = totalMinutes % 60;
+
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
 
-  function renderLectureProgress() {
-    if (!activeLectureWindow || !trackEl || !fillEl || !nowLineEl || !timeRangeEl || !remainingEl) return;
+  /**
+   * Extracts the time window from a lecture item.
+   * @param {Object} item - The lecture item.
+   * @returns {Object|null} Object with start and end Date, or null if invalid.
+   */
+  function getLectureTimeWindow(item) {
+    const startRaw = getItemProperty(item, 'startTime', 'StartTime');
+    const endRaw = getItemProperty(item, 'endTime', 'EndTime');
+    const duration = getItemProperty(item, 'duration', 'Duration');
 
-    const start = activeLectureWindow.start;
-    const end = activeLectureWindow.end;
+    if (!startRaw) {
+      return null;
+    }
+
+    const start = new Date(startRaw);
+    if (Number.isNaN(start.getTime())) {
+      return null;
+    }
+
+    // Try explicit end time first
+    if (endRaw) {
+      const end = new Date(endRaw);
+      if (!Number.isNaN(end.getTime())) {
+        return { start, end };
+      }
+    }
+
+    // Calculate end from duration
+    const minutes = parseDurationToMinutes(duration);
+    const end = new Date(start.getTime() + (minutes * MS_PER_MINUTE));
+    return { start, end };
+  }
+
+  // ============================================================================
+  // UI State Functions
+  // ============================================================================
+
+  /**
+   * Shows the join lecture UI state.
+   */
+  function showJoinState() {
+    elements.joinState.hidden = false;
+    elements.inClassState.hidden = true;
+
+    state.activeLectureWindow = null;
+
+    if (state.lectureProgressTimer) {
+      clearInterval(state.lectureProgressTimer);
+      state.lectureProgressTimer = null;
+    }
+  }
+
+  /**
+   * Renders the lecture progress bar and time information.
+   */
+  function renderLectureProgress() {
+    const { track, fill, nowLine, timeRange, remaining } = elements;
+
+    if (!state.activeLectureWindow || !track || !fill || !nowLine || !timeRange || !remaining) {
+      return;
+    }
+
+    const { start, end } = state.activeLectureWindow;
     const now = new Date();
 
     const totalMs = Math.max(1, end.getTime() - start.getTime());
-    const rawMs = now.getTime() - start.getTime();
-    const clampedMs = Math.max(0, Math.min(totalMs, rawMs));
-    const pct = clampedMs / totalMs;
+    const elapsedMs = now.getTime() - start.getTime();
+    const clampedMs = Math.max(0, Math.min(totalMs, elapsedMs));
+    const progressRatio = clampedMs / totalMs;
 
-    // Update labels
-    timeRangeEl.textContent = formatTimeRange(start, end);
+    // Update time range label
+    timeRange.textContent = formatTimeRange(start, end);
 
+    // Update remaining time label
+    let statusText = '';
     if (now < start) {
-      const minsToStart = (start.getTime() - now.getTime()) / (60 * 1000);
-      remainingEl.textContent = `Starts in ${humanizeMinutes(minsToStart)}`;
-      try { trackEl.setAttribute('aria-valuetext', `Starts in ${humanizeMinutes(minsToStart)}`); } catch (e) { /* ignore */ }
+      const minsToStart = (start.getTime() - now.getTime()) / MS_PER_MINUTE;
+      statusText = `Starts in ${humanizeMinutes(minsToStart)}`;
     } else if (now >= end) {
-      remainingEl.textContent = 'Ended';
-      try { trackEl.setAttribute('aria-valuetext', 'Ended'); } catch (e) { /* ignore */ }
+      statusText = 'Ended';
     } else {
-      const minsLeft = (end.getTime() - now.getTime()) / (60 * 1000);
-      remainingEl.textContent = `${humanizeMinutes(minsLeft)} left`;
-      try { trackEl.setAttribute('aria-valuetext', `${humanizeMinutes(minsLeft)} left`); } catch (e) { /* ignore */ }
+      const minsLeft = (end.getTime() - now.getTime()) / MS_PER_MINUTE;
+      statusText = `${humanizeMinutes(minsLeft)} left`;
     }
 
-    // Position now-line + fill
-    const pct100 = Math.max(0, Math.min(100, pct * 100));
-    nowLineEl.style.left = `${pct100}%`;
-    fillEl.style.width = `${pct100}%`;
+    remaining.textContent = statusText;
+    safeSetAttribute(track, 'aria-valuetext', statusText);
 
-    try { trackEl.setAttribute('aria-valuenow', String(Math.round(pct100))); } catch (e) { /* ignore */ }
+    // Update progress bar position
+    const progressPercent = Math.max(0, Math.min(100, progressRatio * 100));
+    nowLine.style.left = `${progressPercent}%`;
+    fill.style.width = `${progressPercent}%`;
+
+    safeSetAttribute(track, 'aria-valuenow', String(Math.round(progressPercent)));
   }
 
-  function showInClass(item) {
-    const name = item?.name ?? item?.Name ?? '';
-    const desc = item?.description ?? item?.Description ?? '';
-    classNameEl.textContent = name;
-    classDescEl.textContent = desc;
+  /**
+   * Shows the in-class UI state with lecture information.
+   * @param {Object} item - The active lecture item.
+   */
+  function showInClassState(item) {
+    const name = getItemProperty(item, 'name', 'Name', '');
+    const description = getItemProperty(item, 'description', 'Description', '');
 
-    activeLectureWindow = getLectureTimeWindow(item);
-    if (trackEl && fillEl && nowLineEl && timeRangeEl && remainingEl) {
-      if (activeLectureWindow) {
-        trackEl.hidden = false;
+    elements.className.textContent = name;
+    elements.classDesc.textContent = description;
+
+    state.activeLectureWindow = getLectureTimeWindow(item);
+
+    const { track, fill, nowLine, timeRange, remaining } = elements;
+    const hasProgressElements = track && fill && nowLine && timeRange && remaining;
+
+    if (hasProgressElements) {
+      if (state.activeLectureWindow) {
+        track.hidden = false;
         renderLectureProgress();
-        if (!lectureProgressTimer) {
-          lectureProgressTimer = setInterval(renderLectureProgress, 15000);
+
+        if (!state.lectureProgressTimer) {
+          state.lectureProgressTimer = setInterval(renderLectureProgress, PROGRESS_UPDATE_INTERVAL_MS);
         }
       } else {
-        // If we can't compute timing, keep the UI tidy.
-        timeRangeEl.textContent = '';
-        remainingEl.textContent = '';
-        trackEl.hidden = true;
-        if (lectureProgressTimer) {
-          clearInterval(lectureProgressTimer);
-          lectureProgressTimer = null;
+        // Clear timing UI if we can't compute it
+        timeRange.textContent = '';
+        remaining.textContent = '';
+        track.hidden = true;
+
+        if (state.lectureProgressTimer) {
+          clearInterval(state.lectureProgressTimer);
+          state.lectureProgressTimer = null;
         }
       }
     }
 
-    joinState.hidden = true;
-    inClassState.hidden = false;
+    elements.joinState.hidden = true;
+    elements.inClassState.hidden = false;
   }
 
-  function normalizeStatus(status) {
-    if (status == null) return null;
-    if (typeof status === 'number') return status;
-    return String(status).trim().toLowerCase();
-  }
+  // ============================================================================
+  // API Functions
+  // ============================================================================
 
-  // Active == InProgress (string) or 1 (enum value)
-  function isActiveLectureStatus(status) {
-    const s = normalizeStatus(status);
-    return s === 1 || s === 'inprogress' || s === 'in progress';
-  }
-
-  function parseDurationToMinutes(input) {
-    if (input == null) return 60;
-    if (typeof input === 'number') return Math.max(0, Math.floor(input));
-    const s = String(input).trim();
-    if (/^P/i.test(s)) {
-      const up = s.toUpperCase();
-      const h = Number((up.match(/(\d+)H/) || [0, 0])[1] || 0);
-      const m = Number((up.match(/(\d+)M/) || [0, 0])[1] || 0);
-      const sec = Number((up.match(/(\d+)S/) || [0, 0])[1] || 0);
-      return h * 60 + m + Math.round(sec / 60);
-    }
-    const hhmmss = s.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
-    if (hhmmss) return Number(hhmmss[1]) * 60 + Number(hhmmss[2]) + Math.round(Number(hhmmss[3]) / 60);
-    const hhmm = s.match(/^(\d{1,2}):(\d{2})$/);
-    if (hhmm) return Number(hhmm[1]) * 60 + Number(hhmm[2]);
-    const hm = s.match(/^(\d+)h(?:([0-9]+)m)?$/i);
-    if (hm) return Number(hm[1]) * 60 + Number(hm[2] || 0);
-    const mins = s.match(/^(\d+)(?:m)?$/i);
-    if (mins) return Number(mins[1]);
-    return 60;
-  }
-
-  async function fetchStudentLectures({ page = 0, pageSize = 200, fromMonthsAgo = null, status = null } = {}) {
+  /**
+   * Builds the query string for the lectures API.
+   * @param {Object} options - The query options.
+   * @returns {string} The query string.
+   */
+  function buildLecturesQueryString({ page = 0, pageSize = 200, fromMonthsAgo = null, status = null } = {}) {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
-    if (fromMonthsAgo != null) params.set('fromMonthsAgo', String(fromMonthsAgo));
-    if (status != null) params.set('status', String(status));
 
-    const candidates = [
-      '/api/lectures/student?' + params.toString(),
-      '/api/lectrues/student?' + params.toString(),
-      '/api/lectures?' + params.toString()
-    ];
+    if (fromMonthsAgo != null) {
+      params.set('fromMonthsAgo', String(fromMonthsAgo));
+    }
 
-    let lastNon404 = null;
+    if (status != null) {
+      params.set('status', String(status));
+    }
 
-    for (const url of candidates) {
+    return params.toString();
+  }
+
+  /**
+   * Fetches student lectures from the API.
+   * Tries multiple endpoint candidates for compatibility.
+   * @param {Object} options - The fetch options.
+   * @returns {Promise<Array|null>} The lectures array or null on failure.
+   */
+  async function fetchStudentLectures(options = {}) {
+    const queryString = buildLecturesQueryString(options);
+    let lastNon404Response = null;
+
+    for (const baseUrl of API_ENDPOINTS) {
+      const url = `${baseUrl}?${queryString}`;
+
       try {
-        const resp = await fetch(url, {
+        const response = await fetch(url, {
           method: 'GET',
           credentials: 'same-origin',
           headers: { 'Accept': 'application/json' }
         });
 
-        if (resp.status === 404) continue;
-        lastNon404 = resp;
+        if (response.status === 404) {
+          continue;
+        }
 
-        if (!resp.ok) return null;
-        const data = await resp.json();
+        lastNon404Response = response;
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const data = await response.json();
         return Array.isArray(data) ? data : (data?.items ?? data?.Items ?? []);
-      } catch (e) {
-        // try next candidate
+      } catch {
+        // Try next endpoint candidate
       }
     }
 
-    if (lastNon404 && !lastNon404.ok) return null;
+    if (lastNon404Response && !lastNon404Response.ok) {
+      return null;
+    }
+
     return null;
   }
 
-  async function loadStudentLecturesToCalendar({ page = 0, pageSize = 200, fromMonthsAgo = null } = {}) {
-    const data = await fetchStudentLectures({ page, pageSize, fromMonthsAgo });
-    if (!data || data.length === 0) return;
+  /**
+   * Loads student lectures into the calendar.
+   * @param {Object} options - The fetch options.
+   */
+  async function loadStudentLecturesToCalendar(options = {}) {
+    const data = await fetchStudentLectures(options);
 
-    // If any active lecture exists, switch UI to the in-class panel
-    try {
-      const active = data.find(x => isActiveLectureStatus(x?.status ?? x?.Status));
-      if (active) showInClass(active);
-    } catch (e) { /* ignore */ }
-
-    if (window.AttendanceCalendar && typeof window.AttendanceCalendar.addEvent === 'function') {
-      for (const item of data) {
-        const name = item?.name ?? item?.Name ?? 'Untitled';
-        const startTime = item?.startTime ?? item?.StartTime;
-        const description = item?.description ?? item?.Description ?? '';
-        const duration = item?.duration ?? item?.Duration ?? null;
-        const statusVal = item?.status ?? item?.Status;
-        const evId = item?.id ?? item?.Id ?? null;
-
-        // keep status map updated for the day pills
-        try { if (evId != null && statusVal != null) window._lectureStatusMap[String(evId)] = statusVal; } catch (e) { /* ignore */ }
-
-        const minutes = parseDurationToMinutes(duration);
-        try {
-          const startDate = startTime ? new Date(startTime) : null;
-          const endDate = startDate ? new Date(startDate.getTime() + (minutes * 60 * 1000)) : null;
-          if (startDate && endDate) {
-            window.AttendanceCalendar.addEvent({
-              id: evId,
-              title: name,
-              description: description || '',
-              start: startDate,
-              end: endDate,
-              status: statusVal
-            });
-          }
-        } catch (e) {
-          console.error('Failed to add lecture to calendar', e, item);
-        }
-      }
-    }
-  }
-
-  async function detectAndShowActiveLecture() {
-    // Prefer querying only active/in-progress lectures for the UI toggle
-    const data = await fetchStudentLectures({ page: 0, pageSize: 20, status: 'InProgress' });
-    const active = Array.isArray(data) ? data.find(x => isActiveLectureStatus(x?.status ?? x?.Status)) : null;
-    if (active) showInClass(active);
-    else showJoin();
-  }
-
-  // Use the join page flow when student enters an ID
-  function goToJoinPage() {
-    const id = (classIdInput?.value ?? '').trim();
-    if (!id) {
-      try { classIdInput?.focus(); } catch (e) { /* ignore */ }
+    if (!data || data.length === 0) {
       return;
     }
+
+    // Check for active lecture and switch UI if found
+    try {
+      const activeLecture = data.find(function (item) {
+        return isActiveLectureStatus(getItemProperty(item, 'status', 'Status'));
+      });
+
+      if (activeLecture) {
+        showInClassState(activeLecture);
+      }
+    } catch {
+      // Ignore errors when checking for active lecture
+    }
+
+    // Add events to calendar if available
+    if (!globalThis.AttendanceCalendar || typeof globalThis.AttendanceCalendar.addEvent !== 'function') {
+      return;
+    }
+
+    for (const item of data) {
+      addLectureToCalendar(item);
+    }
+  }
+
+  /**
+   * Adds a single lecture item to the calendar.
+   * @param {Object} item - The lecture item.
+   */
+  function addLectureToCalendar(item) {
+    const id = getItemProperty(item, 'id', 'Id');
+    const name = getItemProperty(item, 'name', 'Name', 'Untitled');
+    const startTime = getItemProperty(item, 'startTime', 'StartTime');
+    const description = getItemProperty(item, 'description', 'Description', '');
+    const duration = getItemProperty(item, 'duration', 'Duration');
+    const status = getItemProperty(item, 'status', 'Status');
+
+    // Update status map for calendar pills
+    if (id != null && status != null) {
+      try {
+        globalThis._lectureStatusMap[String(id)] = status;
+      } catch {
+        // Ignore status map errors
+      }
+    }
+
+    const minutes = parseDurationToMinutes(duration);
+
+    try {
+      const startDate = startTime ? new Date(startTime) : null;
+      const endDate = startDate ? new Date(startDate.getTime() + (minutes * MS_PER_MINUTE)) : null;
+
+      if (startDate && endDate) {
+        globalThis.AttendanceCalendar.addEvent({
+          id: id,
+          title: name,
+          description: description,
+          start: startDate,
+          end: endDate,
+          status: status
+        });
+      }
+    } catch (error) {
+      console.error('[StudentHome] Failed to add lecture to calendar:', error, item);
+    }
+  }
+
+  /**
+   * Detects and shows active lecture, or falls back to join state.
+   */
+  async function detectAndShowActiveLecture() {
+    const data = await fetchStudentLectures({ page: 0, pageSize: 20, status: 'InProgress' });
+
+    const activeLecture = Array.isArray(data)
+      ? data.find(function (item) {
+          return isActiveLectureStatus(getItemProperty(item, 'status', 'Status'));
+        })
+      : null;
+
+    if (activeLecture) {
+      showInClassState(activeLecture);
+    } else {
+      showJoinState();
+    }
+  }
+
+  // ============================================================================
+  // Navigation Functions
+  // ============================================================================
+
+  /**
+   * Navigates to the lecture join page with the entered ID.
+   */
+  function navigateToJoinPage() {
+    const id = (elements.classIdInput?.value ?? '').trim();
+
+    if (!id) {
+      try {
+        elements.classIdInput?.focus();
+      } catch {
+        // Focus may fail
+      }
+      return;
+    }
+
     globalThis.location.href = `/lecture/join/${encodeURIComponent(id)}`;
   }
 
-  joinBtn?.addEventListener('click', (e) => {
-    e?.preventDefault?.();
-    goToJoinPage();
-  });
+  // ============================================================================
+  // Calendar Integration
+  // ============================================================================
 
-  classIdInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      goToJoinPage();
+  /**
+   * Calculates the month difference from now.
+   * @param {Date} now - The current date.
+   * @param {Date} target - The target date.
+   * @returns {number} The number of months ago (can be negative for future).
+   */
+  function calculateMonthsAgo(now, target) {
+    return (now.getFullYear() * 12 + now.getMonth()) - (target.getFullYear() * 12 + target.getMonth());
+  }
+
+  /**
+   * Creates a month key for tracking loaded months.
+   * @param {Date} date - The date.
+   * @returns {string} The month key (e.g., "2026-2").
+   */
+  function createMonthKey(date) {
+    return `${date.getFullYear()}-${date.getMonth() + 1}`;
+  }
+
+  /**
+   * Loads lectures for a specific month into the calendar.
+   * @param {Date} monthDate - A date within the target month.
+   * @param {Date} now - The current date for calculating months ago.
+   */
+  async function loadMonthLectures(monthDate, now) {
+    const calendar = globalThis.AttendanceCalendar;
+    const monthKey = createMonthKey(monthDate);
+
+    if (typeof calendar.isMonthLoaded === 'function' && calendar.isMonthLoaded(monthKey)) {
+      return;
     }
-  });
 
-  // Calendar month lazy-loading (same pattern as professor)
-  (function ensureCalendarRegistration() {
-    let checks = 0;
-    const maxChecks = 200; // ~10s at 50ms
-    const interval = setInterval(() => {
-      checks++;
-      if (window.AttendanceCalendar && typeof window.AttendanceCalendar.onViewChange === 'function') {
-        clearInterval(interval);
+    if (typeof calendar.markMonthLoading === 'function') {
+      calendar.markMonthLoading(monthKey);
+    }
 
-        window.AttendanceCalendar.onViewChange(async (monthKey, viewDate) => {
-          try {
-            if (typeof window.AttendanceCalendar.isMonthLoaded === 'function' && window.AttendanceCalendar.isMonthLoaded(monthKey)) return;
-            if (typeof window.AttendanceCalendar.markMonthLoading === 'function') window.AttendanceCalendar.markMonthLoading(monthKey);
-            const now = new Date();
-            const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) - (viewDate.getFullYear() * 12 + viewDate.getMonth());
-            await loadStudentLecturesToCalendar({ fromMonthsAgo: monthsAgo });
-            if (typeof window.AttendanceCalendar.markMonthLoaded === 'function') window.AttendanceCalendar.markMonthLoaded(monthKey);
-          } catch (e) { console.error(e); }
-        });
+    const monthsAgo = calculateMonthsAgo(now, monthDate);
+    await loadStudentLecturesToCalendar({ fromMonthsAgo: monthsAgo });
 
-        // initial load for previous, current and next months
-        (async () => {
-          try {
-            const now = new Date();
-            const cur = new Date(now.getFullYear(), now.getMonth(), 1);
-            const prev = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
-            const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-            const months = [prev, cur, next];
-            for (const d of months) {
-              const monthKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
-              if (typeof window.AttendanceCalendar.isMonthLoaded === 'function' && window.AttendanceCalendar.isMonthLoaded(monthKey)) continue;
-              if (typeof window.AttendanceCalendar.markMonthLoading === 'function') window.AttendanceCalendar.markMonthLoading(monthKey);
-              const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) - (d.getFullYear() * 12 + d.getMonth());
-              await loadStudentLecturesToCalendar({ fromMonthsAgo: monthsAgo });
-              if (typeof window.AttendanceCalendar.markMonthLoaded === 'function') window.AttendanceCalendar.markMonthLoaded(monthKey);
-            }
-          } catch (e) { console.error(e); }
-        })();
+    if (typeof calendar.markMonthLoaded === 'function') {
+      calendar.markMonthLoaded(monthKey);
+    }
+  }
+
+  /**
+   * Handles calendar view change events.
+   * @param {string} monthKey - The month key.
+   * @param {Date} viewDate - The view date.
+   */
+  async function handleCalendarViewChange(monthKey, viewDate) {
+    const calendar = globalThis.AttendanceCalendar;
+
+    try {
+      if (typeof calendar.isMonthLoaded === 'function' && calendar.isMonthLoaded(monthKey)) {
+        return;
       }
 
-      if (checks >= maxChecks) {
-        clearInterval(interval);
+      if (typeof calendar.markMonthLoading === 'function') {
+        calendar.markMonthLoading(monthKey);
       }
-    }, 50);
-  })();
 
-  // Init UI state first
-  joinState.hidden = true;
-  inClassState.hidden = true;
-  detectAndShowActiveLecture().catch(() => showJoin());
+      const now = new Date();
+      const monthsAgo = calculateMonthsAgo(now, viewDate);
+      await loadStudentLecturesToCalendar({ fromMonthsAgo: monthsAgo });
+
+      if (typeof calendar.markMonthLoaded === 'function') {
+        calendar.markMonthLoaded(monthKey);
+      }
+    } catch (error) {
+      console.error('[StudentHome] Calendar view change error:', error);
+    }
+  }
+
+  /**
+   * Performs initial calendar data load for surrounding months.
+   */
+  async function performInitialCalendarLoad() {
+    try {
+      const now = new Date();
+      const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+      const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+
+      const months = [previousMonth, currentMonth, nextMonth];
+
+      for (const monthDate of months) {
+        await loadMonthLectures(monthDate, now);
+      }
+    } catch (error) {
+      console.error('[StudentHome] Initial calendar load error:', error);
+    }
+  }
+
+  /**
+   * Initializes calendar integration with polling for availability.
+   */
+  function initCalendarIntegration() {
+    let checkCount = 0;
+
+    const checkInterval = setInterval(function () {
+      checkCount++;
+
+      if (globalThis.AttendanceCalendar && typeof globalThis.AttendanceCalendar.onViewChange === 'function') {
+        clearInterval(checkInterval);
+
+        // Register view change handler
+        globalThis.AttendanceCalendar.onViewChange(handleCalendarViewChange);
+
+        // Perform initial load
+        performInitialCalendarLoad();
+      }
+
+      if (checkCount >= CALENDAR_MAX_CHECKS) {
+        clearInterval(checkInterval);
+      }
+    }, CALENDAR_CHECK_INTERVAL_MS);
+  }
+
+  // ============================================================================
+  // Event Listeners
+  // ============================================================================
+
+  /**
+   * Initializes event listeners.
+   */
+  function initEventListeners() {
+    if (elements.joinBtn) {
+      elements.joinBtn.addEventListener('click', function (event) {
+        if (event) {
+          event.preventDefault();
+        }
+        navigateToJoinPage();
+      });
+    }
+
+    if (elements.classIdInput) {
+      elements.classIdInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          navigateToJoinPage();
+        }
+      });
+    }
+  }
+
+  // ============================================================================
+  // Initialization
+  // ============================================================================
+
+  /**
+   * Initializes the student home page.
+   */
+  function init() {
+    // Hide both states initially
+    elements.joinState.hidden = true;
+    elements.inClassState.hidden = true;
+
+    // Set up event listeners
+    initEventListeners();
+
+    // Initialize calendar integration
+    initCalendarIntegration();
+
+    // Detect active lecture and show appropriate UI
+    detectAndShowActiveLecture().catch(function () {
+      showJoinState();
+    });
+  }
+
+  init();
 })();

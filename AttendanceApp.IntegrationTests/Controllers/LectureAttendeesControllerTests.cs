@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using AttendanceApp.Api.Common.Requests.Users;
 using AttendanceApp.Domain.Enums;
 using AttendanceApp.IntegrationTests.Fixtures;
+using AttendanceApp.IntegrationTests.Helpers;
 
 namespace AttendanceApp.IntegrationTests.Controllers;
 

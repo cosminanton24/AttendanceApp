@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using AttendanceApp.Domain.Common;
 using AttendanceApp.Domain.Enums;
 
@@ -13,6 +14,8 @@ public class Lecture : AggregateRoot<Guid>
     public string Description { get; private set; } = default!;
     public DateTime StartTime { get; }
     public TimeSpan Duration { get; }
+    [NotMapped]
+    public DateTime EndTime => StartTime.Add(Duration);
 
     public IReadOnlyCollection<LectureAttendee> Attendees => _attendees.AsReadOnly();
 

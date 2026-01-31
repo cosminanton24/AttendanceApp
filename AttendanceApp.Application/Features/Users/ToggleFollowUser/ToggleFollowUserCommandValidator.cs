@@ -17,8 +17,6 @@ public class ToggleFollowUserCommandHandler(IUserRepository _userRepo, IUserFoll
         var target = await _userRepo.GetByIdAsync(command.TargetId, cancellationToken)
             ?? throw new KeyNotFoundException($"No account with ID {command.TargetId} found.");
 
-        if(target.Type != Domain.Enums.UserType.Professor)
-            throw new ValidationException($"You can only follow professors");
 
         var followState = await _userFollowingsRepository.GetFollowingAsync(user.Id, target.Id, cancellationToken);
         bool newFollowState;

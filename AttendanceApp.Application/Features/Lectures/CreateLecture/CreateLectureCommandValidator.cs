@@ -13,14 +13,14 @@ public sealed class CreateLectureCommandValidator : AbstractValidator<CreateLect
         RuleFor(x => x.Name)
             .NotEmpty()
             .WithMessage("Lecture name is required.")
-            .MaximumLength(100)
-            .WithMessage("Lecture name must be at most 100 characters.");
+            .MaximumLength(25)
+            .WithMessage("Lecture name must be at most 25 characters.");
 
         RuleFor(x => x.Description)
             .NotEmpty()
             .WithMessage("Lecture description is required.")
-            .MaximumLength(500)
-            .WithMessage("Lecture description must be at most 500 characters.");
+            .MaximumLength(150)
+            .WithMessage("Lecture description must be at most 150 characters.");
 
         RuleFor(x => x.StartTime)
             .NotEmpty()

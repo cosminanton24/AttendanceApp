@@ -88,6 +88,38 @@ body{
 .join-result.ok{ color:#58d68d; }
 .join-result.err{ color:#ff6b6b; }
 
+.join-actions{
+  display:flex;
+  justify-content:center;
+  margin-top:6px;
+}
+
+/* Home page button style (duplicated here so Join doesn't need home.css) */
+.btn-glass{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(7,10,18,.65);
+  color:var(--text);
+  cursor:pointer;
+  text-decoration:none;
+}
+
+.btn-glass:hover{
+  border-color:rgba(96,165,250,.55);
+  box-shadow:0 0 0 5px rgba(59,130,246,.14);
+  color:var(--accent2);
+}
+
+.btn-glass:focus{
+  outline:none;
+  box-shadow:0 0 0 5px rgba(59,130,246,.14);
+  border-color:rgba(96,165,250,.55);
+}
+
 .join-card__foot{
   padding:14px 18px;
   border-top:1px solid rgba(255,255,255,.08);

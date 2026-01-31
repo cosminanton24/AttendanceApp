@@ -3,4 +3,5 @@ namespace AttendanceApp.Web.Models;
 public class HomeViewModel
 {
     public UserType UserType { get; set; }
+    public string UserName { get; set; } = string.Empty;
 }

@@ -18,21 +18,20 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
         var alreadyJoined = await _lectureAttendeeRepository.GetAttendeeAsync(command.LectureId, command.UserId, cancellationToken);
         if (alreadyJoined != null)
         {
-            throw new ValidationException($"User has already joined lecture with ID {command.LectureId}.");
+            throw new ValidationException($"User has already joined this lecture.");
         }
+
+        var lecture = await _lectureRepo.GetByIdAsync(command.LectureId, cancellationToken)
+            ?? throw new ValidationException($"No lecture found.");
 
         var userOngoingLectures = await _lectureRepo.GetStudentLecturesAsync(command.UserId, 0, 1, null, LectureStatus.InProgress, cancellationToken);
         if(userOngoingLectures.Count > 0)
         {
-            throw new ValidationException($"User with ID {command.UserId} has already joined a lecture.");
+            throw new ValidationException($"User has already joined a lecture.");
         }
 
-
-        var lecture = await _lectureRepo.GetByIdAsync(command.LectureId, cancellationToken)
-            ?? throw new KeyNotFoundException($"No lecture with ID {command.LectureId} found.");
-
         if(lecture.Status != LectureStatus.InProgress)
-            throw new ValidationException($"Lecture with ID {command.LectureId} is not in progress.");
+            throw new ValidationException($"Lecture not in progress.");
 
         if(user.Type != UserType.Student)
             throw new ValidationException($"You can only join lectures as a student");

@@ -1,116 +1,481 @@
+/**
+ * @fileoverview Professor Home page functionality.
+ * Handles lecture creation, active lecture management, and attendee tracking.
+ */
+
+'use strict';
+
 document.addEventListener('DOMContentLoaded', function () {
+  // ============================================================================
+  // Constants
+  // ============================================================================
+
+  /** Milliseconds per minute */
+  const MS_PER_MINUTE = 60 * 1000;
+
+  /** Default duration in minutes */
+  const DEFAULT_DURATION_MINUTES = 60;
+
+  /** Modal close delay after success (ms) */
+  const MODAL_CLOSE_DELAY_MS = 1000;
+
+  /** Attendee poll interval (ms) */
+  const ATTENDEE_POLL_INTERVAL_MS = 60000;
+
+  /** Calendar registration check interval (ms) */
+  const CALENDAR_CHECK_INTERVAL_MS = 50;
+
+  /** Maximum calendar registration checks */
+  const CALENDAR_MAX_CHECKS = 200;
+
+  /** Default page size for lecture loading */
+  const DEFAULT_PAGE_SIZE = 200;
+
+  /** Attendee page size */
+  const ATTENDEE_PAGE_SIZE = 20;
+
+  /** Search debounce delay (ms) */
+  const SEARCH_DEBOUNCE_MS = 1000;
+
+  /** QR code size in pixels */
+  const QR_CODE_SIZE = 256;
+
+  /**
+   * Lecture status enum values.
+   * @enum {number}
+   */
+  const LectureStatus = Object.freeze({
+    SCHEDULED: 0,
+    IN_PROGRESS: 1,
+    ENDED: 2,
+    CANCELED: 3
+  });
+
+  // ============================================================================
+  // DOM Elements - Modal
+  // ============================================================================
+
   const modalEl = document.getElementById('makeLectureModal');
   const form = document.getElementById('makeLectureForm');
   const feedbackEl = document.getElementById('makeLectureFeedback');
-  if (!modalEl || !form || !feedbackEl) return;
+  const openBtn = document.getElementById('openMakeLectureBtn');
 
-  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-  function showFeedback(msg, type) {
-    feedbackEl.textContent = msg || '';
-    feedbackEl.classList.remove('error', 'success');
-    if (type === 'error') feedbackEl.classList.add('error');
-    else if (type === 'success') feedbackEl.classList.add('success');
+  if (!modalEl || !form || !feedbackEl) {
+    return;
   }
 
-  // When modal opens, close calendar popover if present and clear previous feedback
-  modalEl.addEventListener('show.bs.modal', function () {
-    try {
-      showFeedback('', null);
-      if (window.AttendanceCalendar && typeof window.AttendanceCalendar.close === 'function')
-        window.AttendanceCalendar.close();
-    } catch (e) { /* ignore */ }
-  });
+  // ============================================================================
+  // Utility Functions
+  // ============================================================================
 
-  // When modal is hidden, clear the form and reset submit state
-  modalEl.addEventListener('hidden.bs.modal', function () {
+  /**
+   * Escapes HTML special characters to prevent XSS.
+   * @param {string} str - The string to escape.
+   * @returns {string} The escaped string.
+   */
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  /**
+   * Normalizes a status value to a comparable format.
+   * @param {number|string|null} status - The status value.
+   * @returns {number|string|null} The normalized status.
+   */
+  function normalizeStatus(status) {
+    if (status == null) {
+      return null;
+    }
+    if (typeof status === 'number') {
+      return status;
+    }
+    return String(status).trim().toLowerCase();
+  }
+
+  /**
+   * Checks if a status represents an active (in-progress) lecture.
+   * @param {number|string} status - The status value.
+   * @returns {boolean} True if active.
+   */
+  function isActiveLectureStatus(status) {
+    const normalized = normalizeStatus(status);
+    return normalized === LectureStatus.IN_PROGRESS ||
+           normalized === 'inprogress' ||
+           normalized === 'in progress';
+  }
+
+  /**
+   * Converts a status value to a human-readable label.
+   * @param {number|string} status - The status value.
+   * @returns {string} The status label.
+   */
+  function statusToLabel(status) {
+    const normalized = normalizeStatus(status);
+
+    if (normalized === LectureStatus.SCHEDULED || normalized === 'scheduled') {
+      return 'Scheduled';
+    }
+    if (normalized === LectureStatus.IN_PROGRESS || normalized === 'inprogress') {
+      return 'In Progress';
+    }
+    if (normalized === LectureStatus.ENDED || normalized === 'ended') {
+      return 'Ended';
+    }
+    if (normalized === LectureStatus.CANCELED || normalized === 'canceled') {
+      return 'Canceled';
+    }
+
+    return status ?? 'Unknown';
+  }
+
+  /**
+   * Gets the join URL for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {string} The join URL.
+   */
+  function getJoinUrl(lectureId) {
+    try {
+      return new URL(
+        `/lecture/join/${encodeURIComponent(String(lectureId))}`,
+        globalThis.location.origin
+      ).toString();
+    } catch {
+      return `/lecture/join/${encodeURIComponent(String(lectureId))}`;
+    }
+  }
+
+  // ============================================================================
+  // Duration Parsing Functions
+  // ============================================================================
+
+  /**
+   * Parses a duration input into TimeSpan format (HH:MM:SS).
+   * Supports: ISO 8601 (PT1H30M), hh:mm, 1h30m, 90m, 90.
+   * @param {string} input - The duration input.
+   * @returns {string|null} The TimeSpan string or null if invalid.
+   */
+  function parseDurationToTimeSpan(input) {
+    if (!input) {
+      return null;
+    }
+
+    const trimmed = input.trim();
+
+    // ISO 8601 duration (PT1H30M)
+    if (/^P/i.test(trimmed)) {
+      try {
+        const upper = trimmed.toUpperCase();
+        const hoursMatch = /(\d+)H/.exec(upper);
+        const minsMatch = /(\d+)M/.exec(upper);
+        const secsMatch = /(\d+)S/.exec(upper);
+        const hours = Number(hoursMatch?.[1] ?? 0);
+        const mins = Number(minsMatch?.[1] ?? 0);
+        const secs = Number(secsMatch?.[1] ?? 0);
+        return formatTimeSpan(hours, mins, secs);
+      } catch {
+        // Fall through to other formats
+      }
+    }
+
+    // hh:mm format
+    if (/^\d+:\d+$/.test(trimmed)) {
+      const parts = trimmed.split(':').map(Number);
+      return formatTimeSpan(parts[0], parts[1], 0);
+    }
+
+    // 1h30m or 1h format
+    const hoursMinutesMatch = /^(\d+)h(?:(\d+)m)?$/i.exec(trimmed);
+    if (hoursMinutesMatch) {
+      const hours = Number(hoursMinutesMatch[1]);
+      const mins = Number(hoursMinutesMatch[2] || 0);
+      return formatTimeSpan(hours, mins, 0);
+    }
+
+    // Minutes only (90 or 90m)
+    const minutesMatch = /^(\d+)(?:m)?$/i.exec(trimmed);
+    if (minutesMatch) {
+      const totalMin = Number(minutesMatch[1]);
+      const hours = Math.floor(totalMin / 60);
+      const mins = totalMin % 60;
+      return formatTimeSpan(hours, mins, 0);
+    }
+
+    // Already hh:mm:ss format
+    if (/^\d{1,2}:\d{2}:\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
+  /**
+   * Formats hours, minutes, seconds into TimeSpan string.
+   * @param {number} hours - Hours.
+   * @param {number} minutes - Minutes.
+   * @param {number} seconds - Seconds.
+   * @returns {string} The formatted TimeSpan.
+   */
+  function formatTimeSpan(hours, minutes, seconds) {
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    const ss = String(seconds).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  /**
+   * Converts a TimeSpan or duration string to minutes.
+   * @param {string|number|null} input - The duration input.
+   * @returns {number} The duration in minutes.
+   */
+  function parseDurationToMinutes(input) {
+    if (input == null) {
+      return DEFAULT_DURATION_MINUTES;
+    }
+
+    if (typeof input === 'number') {
+      return Math.max(0, Math.floor(input));
+    }
+
+    const str = String(input).trim();
+
+    // ISO 8601 duration
+    if (/^P/i.test(str)) {
+      const upper = str.toUpperCase();
+      const hoursMatch = /(\d+)H/.exec(upper);
+      const minsMatch = /(\d+)M/.exec(upper);
+      const secsMatch = /(\d+)S/.exec(upper);
+      const hours = Number(hoursMatch?.[1] ?? 0);
+      const mins = Number(minsMatch?.[1] ?? 0);
+      const secs = Number(secsMatch?.[1] ?? 0);
+      return hours * 60 + mins + Math.round(secs / 60);
+    }
+
+    // hh:mm:ss format
+    const hhmmss = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(str);
+    if (hhmmss) {
+      return Number(hhmmss[1]) * 60 + Number(hhmmss[2]) + Math.round(Number(hhmmss[3]) / 60);
+    }
+
+    // hh:mm format
+    const hhmm = /^(\d{1,2}):(\d{2})$/.exec(str);
+    if (hhmm) {
+      return Number(hhmm[1]) * 60 + Number(hhmm[2]);
+    }
+
+    // 1h30m format
+    const hoursMinutes = /^(\d+)h(?:(\d+)m)?$/i.exec(str);
+    if (hoursMinutes) {
+      return Number(hoursMinutes[1]) * 60 + Number(hoursMinutes[2] || 0);
+    }
+
+    // Minutes only
+    const mins = /^(\d+)(?:m)?$/i.exec(str);
+    if (mins) {
+      return Number(mins[1]);
+    }
+
+    return DEFAULT_DURATION_MINUTES;
+  }
+
+  /**
+   * Converts a TimeSpan string to minutes (for form submission).
+   * @param {string} timeSpan - The TimeSpan string.
+   * @returns {number} The duration in minutes.
+   */
+  function timeSpanToMinutes(timeSpan) {
+    if (!timeSpan) {
+      return DEFAULT_DURATION_MINUTES;
+    }
+
+    const parts = String(timeSpan).split(':').map(Number);
+
+    if (parts.length >= 2) {
+      const hours = Number(parts[0] || 0);
+      const mins = Number(parts[1] || 0);
+      const secs = Number(parts[2] || 0);
+      return hours * 60 + mins + Math.round(secs / 60);
+    }
+
+    const parsed = Number.parseInt(timeSpan, 10);
+    return Number.isNaN(parsed) ? DEFAULT_DURATION_MINUTES : parsed;
+  }
+
+  // ============================================================================
+  // Modal Functions
+  // ============================================================================
+
+  /**
+   * Opens the create lecture modal.
+   */
+  function openModal() {
+    modalEl.classList.add('open');
+    modalEl.setAttribute('aria-hidden', 'false');
+    showFeedback('', null);
+
+    // Close calendar popover if present
+    try {
+      if (globalThis.AttendanceCalendar && typeof globalThis.AttendanceCalendar.close === 'function') {
+        globalThis.AttendanceCalendar.close();
+      }
+    } catch {
+      // Ignore calendar close errors
+    }
+  }
+
+  /**
+   * Closes the create lecture modal.
+   */
+  function closeModal() {
+    modalEl.classList.remove('open');
+    modalEl.setAttribute('aria-hidden', 'true');
+
+    // Clear form and reset submit state
     try {
       form.querySelector('[name="title"]').value = '';
       form.querySelector('[name="date"]').value = '';
       form.querySelector('[name="start"]').value = '';
       form.querySelector('[name="duration"]').value = '';
       form.querySelector('[name="description"]').value = '';
-      const submitBtn = form.querySelector('[type="submit"]');
-      if (submitBtn) submitBtn.disabled = false;
-      showFeedback('', null);
-    } catch (e) { /* ignore */ }
-  });
 
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
+      const submitBtn = form.querySelector('[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+      }
+
+      showFeedback('', null);
+    } catch {
+      // Ignore form reset errors
+    }
+  }
+
+  /**
+   * Displays feedback message in the modal.
+   * @param {string} message - The message to display.
+   * @param {string|null} type - The message type ('error', 'success', or null).
+   */
+  function showFeedback(message, type) {
+    feedbackEl.textContent = message || '';
+    feedbackEl.classList.remove('error', 'success');
+
+    if (type === 'error') {
+      feedbackEl.classList.add('error');
+    } else if (type === 'success') {
+      feedbackEl.classList.add('success');
+    }
+  }
+
+  // ============================================================================
+  // Form Submission
+  // ============================================================================
+
+  /**
+   * Extracts an error message from an API response.
+   * @param {Object} data - The response data.
+   * @returns {string|null} The error message or null.
+   */
+  function extractErrorMessage(data) {
+    if (!data) {
+      return null;
+    }
+
+    // Prefer the API detail field
+    if (data.detail) {
+      // Try to extract message between '--' and 'Severity:' for validation errors
+      const match = /--\s*(.*?)\s*Severity:/is.exec(String(data.detail));
+      if (match?.[1]) {
+        return match[1].trim();
+      }
+      // No match - use the full detail string
+      return String(data.detail).trim();
+    }
+
+    if (data.message) {
+      return data.message;
+    }
+
+    if (data.title) {
+      return data.title;
+    }
+
+    if (data.errors) {
+      return JSON.stringify(data.errors);
+    }
+
+    return null;
+  }
+
+  /**
+   * Adds a newly created lecture to the calendar.
+   * @param {string} createdId - The created lecture ID.
+   * @param {string} title - The lecture title.
+   * @param {string} description - The lecture description.
+   * @param {string} startIso - The start time ISO string.
+   * @param {number} minutes - The duration in minutes.
+   */
+  function addCreatedLectureToCalendar(createdId, title, description, startIso, minutes) {
+    if (!globalThis.AttendanceCalendar || typeof globalThis.AttendanceCalendar.addEvent !== 'function') {
+      return;
+    }
+
+    const startDate = startIso ? new Date(startIso) : null;
+    const endDate = startDate ? new Date(startDate.getTime() + minutes * MS_PER_MINUTE) : null;
+
+    if (!startDate || !endDate) {
+      return;
+    }
+
+    try {
+      globalThis.AttendanceCalendar.addEvent({
+        id: createdId || null,
+        title: title,
+        description: description || '',
+        start: startDate,
+        end: endDate,
+        status: LectureStatus.SCHEDULED
+      });
+    } catch (error) {
+      console.error('[ProfessorHome] Failed to add created lecture to calendar:', error);
+    }
+  }
+
+  /**
+   * Handles the form submission for creating a lecture.
+   * @param {Event} event - The submit event.
+   */
+  async function handleFormSubmit(event) {
+    event.preventDefault();
 
     const title = form.querySelector('[name="title"]').value.trim();
-    const date = form.querySelector('[name="date"]').value; // YYYY-MM-DD
-    const start = form.querySelector('[name="start"]').value; // HH:MM
-    let duration = form.querySelector('[name="duration"]').value.trim();
+    const date = form.querySelector('[name="date"]').value;
+    const start = form.querySelector('[name="start"]').value;
+    const duration = form.querySelector('[name="duration"]').value.trim();
     const description = form.querySelector('[name="description"]').value.trim();
 
-    // Simple client-side validation
+    // Client-side validation
     if (!title || !date || !start || !duration || !description) {
       showFeedback('Please complete all fields.', 'error');
       return;
     }
 
+    // Parse and validate date/time
     let startIso = null;
     try {
-      const dt = new Date(date + 'T' + start);
-      if (isNaN(dt.getTime())) throw new Error('Invalid date/time');
-      startIso = dt.toISOString();
-    } catch (err) {
+      const dateTime = new Date(date + 'T' + start);
+      if (Number.isNaN(dateTime.getTime())) {
+        throw new TypeError('Invalid date/time');
+      }
+      startIso = dateTime.toISOString();
+    } catch {
       showFeedback('Invalid date or start time.', 'error');
       return;
     }
 
-    // Parse duration input into TimeSpan format (c) -> HH:MM:SS
-    function parseDurationToTimeSpan(input) {
-      if (!input) return null;
-      input = input.trim();
-
-      // ISO 8601 duration (PT1H30M)
-      if (/^P/i.test(input)) {
-        try {
-          const s = input.toUpperCase();
-          const h = Number((s.match(/(\d+)H/) || [0, 0])[1] || 0);
-          const m = Number((s.match(/(\d+)M/) || [0, 0])[1] || 0);
-          const sec = Number((s.match(/(\d+)S/) || [0, 0])[1] || 0);
-          const hh = String(h).padStart(2, '0');
-          const mm = String(m).padStart(2, '0');
-          const ss = String(sec).padStart(2, '0');
-          return `${hh}:${mm}:${ss}`;
-        } catch (e) { /* fallthrough */ }
-      }
-
-      // hh:mm
-      if (/^\d+:\d+$/.test(input)) {
-        const parts = input.split(':').map(Number);
-        const hh = String(parts[0]).padStart(2, '0');
-        const mm = String(parts[1]).padStart(2, '0');
-        return `${hh}:${mm}:00`;
-      }
-
-      // 1h30m or 1h
-      const hn = input.match(/^(\d+)h(?:([0-9]+)m)?$/i);
-      if (hn) {
-        const hh = String(Number(hn[1])).padStart(2, '0');
-        const mm = String(Number(hn[2] || 0)).padStart(2, '0');
-        return `${hh}:${mm}:00`;
-      }
-
-      // minutes like 90 or 90m
-      const mn = input.match(/^(\d+)(?:m)?$/i);
-      if (mn) {
-        const totalMin = Number(mn[1]);
-        const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
-        const mm = String(totalMin % 60).padStart(2, '0');
-        return `${hh}:${mm}:00`;
-      }
-
-      // already hh:mm:ss
-      if (/^\d{1,2}:\d{2}:\d{2}$/.test(input)) return input;
-
-      return null;
-    }
-
+    // Parse and validate duration
     const durationTs = parseDurationToTimeSpan(duration);
     if (!durationTs) {
       showFeedback('Invalid duration format. See example formats.', 'error');
@@ -125,265 +490,277 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     const submitBtn = form.querySelector('[type="submit"]');
-    if (submitBtn) submitBtn.disabled = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+    }
 
     try {
-      const resp = await fetch('/api/lectures', {
+      const response = await fetch('/api/lectures', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify(payload)
       });
 
-      if (!resp.ok) {
-        let message = `Error ${resp.status}`;
+      if (!response.ok) {
+        let message = `Error ${response.status}`;
+
         try {
-          const data = await resp.json();
-          if (data) {
-            // Prefer the API detail field and extract between '--' and 'Severity:'
-            if (data.detail) {
-              const m = String(data.detail).match(/--\s*(.*?)\s*Severity:/is);
-              if (m && m[1]) message = m[1].trim();
-              else if (data.message) message = data.message;
-              else if (data.title) message = data.title;
-              else if (data.errors) message = JSON.stringify(data.errors);
-              else message = String(data.detail).trim();
-            }
-            else if (data.message) message = data.message;
-            else if (data.title) message = data.title;
-            else if (data.errors) message = JSON.stringify(data.errors);
+          const data = await response.json();
+          const extracted = extractErrorMessage(data);
+          if (extracted) {
+            message = extracted;
           }
-        } catch (e) {
-          try { message = await resp.text(); } catch (e) { /* ignore */ }
+        } catch {
+          try {
+            message = await response.text();
+          } catch {
+            // Use default message
+          }
         }
+
         showFeedback(message, 'error');
-        if (submitBtn) submitBtn.disabled = false;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+        }
         return;
       }
 
-      // success — get created id from API and add event to calendar
+      // Success - add event to calendar
       showFeedback('Created', 'success');
-      try {
-        const created = await resp.json();
-        const createdId = (created && typeof created === 'string') ? created : (created?.Id || created);
 
-        function timeSpanToMinutes(ts) {
-          if (!ts) return 60;
-          const parts = String(ts).split(':').map(Number);
-          if (parts.length >= 2) return (Number(parts[0] || 0) * 60) + Number(parts[1] || 0) + Math.round(Number(parts[2] || 0) / 60);
-          return parseInt(ts, 10) || 60;
-        }
+      try {
+        const created = await response.json();
+        const createdId = (created && typeof created === 'string')
+          ? created
+          : (created?.Id || created);
 
         const minutes = timeSpanToMinutes(durationTs);
-        const startDate = startIso ? new Date(startIso) : null;
-        const endDate = startDate ? new Date(startDate.getTime() + minutes * 60 * 1000) : null;
-        if (window.AttendanceCalendar && typeof window.AttendanceCalendar.addEvent === 'function' && startDate && endDate) {
-          try {
-            window.AttendanceCalendar.addEvent({
-              id: createdId || null,
-              title: title,
-              description: description || '',
-              start: startDate,
-              end: endDate
-            });
-          } catch (e) {
-            console.error('Failed to add created lecture to calendar', e);
-          }
-        }
-      } catch (e) {
-        // ignore JSON parse errors
+        addCreatedLectureToCalendar(createdId, title, description, startIso, minutes);
+      } catch {
+        // Ignore JSON parse errors
       }
 
-      // close after 1 second
-      setTimeout(() => modal.hide(), 1000);
-    } catch (err) {
-      console.error(err);
+      // Close after delay
+      setTimeout(closeModal, MODAL_CLOSE_DELAY_MS);
+    } catch (error) {
+      console.error('[ProfessorHome] Form submit error:', error);
       showFeedback('Network error', 'error');
-      if (submitBtn) submitBtn.disabled = false;
-    }
-  });
 
-  // Load professor lectures and add them to the calendar (no UI text updates)
-  async function loadProfessorLectures({ page = 0, pageSize = 200, fromMonthsAgo = null } = {}) {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+      }
+    }
+  }
+
+  // ============================================================================
+  // Lecture Loading
+  // ============================================================================
+
+  /**
+   * Loads professor lectures and adds them to the calendar.
+   * @param {Object} options - Load options.
+   * @param {number} [options.page=0] - The page number.
+   * @param {number} [options.pageSize=200] - The page size.
+   * @param {number|null} [options.fromMonthsAgo=null] - Filter by months ago.
+   */
+  async function loadProfessorLectures(options = {}) {
+    const { page = 0, pageSize = DEFAULT_PAGE_SIZE, fromMonthsAgo = null } = options;
+
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
-    if (fromMonthsAgo != null) params.set('fromMonthsAgo', String(fromMonthsAgo));
+
+    if (fromMonthsAgo != null) {
+      params.set('fromMonthsAgo', String(fromMonthsAgo));
+    }
 
     try {
-      const resp = await fetch('/api/lectures/me?' + params.toString(), {
+      const response = await fetch('/api/lectures/me?' + params.toString(), {
         method: 'GET',
         credentials: 'same-origin',
         headers: { 'Accept': 'application/json' }
       });
 
-      if (!resp.ok) {
+      if (!response.ok) {
         return;
       }
 
-      const data = await resp.json();
+      const data = await response.json();
+
       if (!data || data.length === 0) {
         return;
       }
 
-      // Render active lecture quadrants under the professor dashboard
+      // Render active lecture cards
       try {
         for (const item of data) {
           cacheLectureMeta(item);
+
           const id = item?.id ?? item?.Id;
           const status = item?.status ?? item?.Status;
-          if (isActiveLectureStatus(status)) upsertActiveLectureCard(item);
-          else if (id != null) removeActiveLectureCard(id);
+
+          if (isActiveLectureStatus(status)) {
+            upsertActiveLectureCard(item);
+          } else if (id != null) {
+            removeActiveLectureCard(id);
+          }
         }
 
-        // Immediately refresh attendee totals (then keep polling every 3s)
-        try { pollActiveLectureAttendeeCounts(); } catch (e) { /* ignore */ }
-      } catch (e) {
-        console.error('Failed to render active lecture cards', e);
+        // Refresh attendee totals
+        try {
+          pollActiveLectureAttendeeCounts();
+        } catch {
+          // Ignore poll errors
+        }
+      } catch (error) {
+        console.error('[ProfessorHome] Failed to render active lecture cards:', error);
       }
 
-      // Add lectures to the calendar using existing API
-      if (window.AttendanceCalendar && typeof window.AttendanceCalendar.addEvent === 'function') {
-        function parseDurationToMinutes(input) {
-          if (input == null) return 60;
-          if (typeof input === 'number') return Math.max(0, Math.floor(input));
-          const s = String(input).trim();
-          if (/^P/i.test(s)) {
-            const up = s.toUpperCase();
-            const h = Number((up.match(/(\d+)H/) || [0,0])[1] || 0);
-            const m = Number((up.match(/(\d+)M/) || [0,0])[1] || 0);
-            const sec = Number((up.match(/(\d+)S/) || [0,0])[1] || 0);
-            return h * 60 + m + Math.round(sec / 60);
-          }
-          const hhmmss = s.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
-          if (hhmmss) return Number(hhmmss[1]) * 60 + Number(hhmmss[2]) + Math.round(Number(hhmmss[3]) / 60);
-          const hhmm = s.match(/^(\d{1,2}):(\d{2})$/);
-          if (hhmm) return Number(hhmm[1]) * 60 + Number(hhmm[2]);
-          const hm = s.match(/^(\d+)h(?:([0-9]+)m)?$/i);
-          if (hm) return Number(hm[1]) * 60 + Number(hm[2] || 0);
-          const mins = s.match(/^(\d+)(?:m)?$/i);
-          if (mins) return Number(mins[1]);
-          return 60;
-        }
-
+      // Add lectures to calendar
+      if (globalThis.AttendanceCalendar && typeof globalThis.AttendanceCalendar.addEvent === 'function') {
         for (const item of data) {
-          const name = item.name || item.Name || 'Untitled';
-          const startTime = item.startTime || item.StartTime;
-          const description = item.description || item.Description || '';
-          const duration = item.duration || item.Duration || null;
-
-          const minutes = parseDurationToMinutes(duration);
-          try {
-            const startDate = startTime ? new Date(startTime) : null;
-            const endDate = startDate ? new Date(startDate.getTime() + (minutes * 60 * 1000)) : null;
-            const evId = item.id || item.Id || null;
-            if (startDate && endDate) {
-                window.AttendanceCalendar.addEvent({
-                  id: evId,
-                  title: name,
-                  description: description || '',
-                  start: startDate,
-                  end: endDate,
-                  status: item.status ?? item.Status
-                });
-            }
-          } catch (e) {
-            console.error('Failed to add lecture to calendar', e, item);
-          }
+          addLectureToCalendar(item);
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error('[ProfessorHome] Load lectures error:', error);
     }
   }
 
-  // Basic HTML escaper
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;') 
-      .replace(/</g, '&lt;') 
-      .replace(/>/g, '&gt;') 
-      .replace(/"/g, '&quot;') 
-      .replace(/'/g, '&#039;'); 
+  /**
+   * Adds a single lecture item to the calendar.
+   * @param {Object} item - The lecture item.
+   */
+  function addLectureToCalendar(item) {
+    const name = item.name || item.Name || 'Untitled';
+    const startTime = item.startTime || item.StartTime;
+    const description = item.description || item.Description || '';
+    const duration = item.duration || item.Duration || null;
+    const eventId = item.id || item.Id || null;
+
+    const minutes = parseDurationToMinutes(duration);
+
+    try {
+      const startDate = startTime ? new Date(startTime) : null;
+      const endDate = startDate ? new Date(startDate.getTime() + (minutes * MS_PER_MINUTE)) : null;
+
+      if (startDate && endDate) {
+        globalThis.AttendanceCalendar.addEvent({
+          id: eventId,
+          title: name,
+          description: description || '',
+          start: startDate,
+          end: endDate,
+          status: item.status ?? item.Status
+        });
+      }
+    } catch (error) {
+      console.error('[ProfessorHome] Failed to add lecture to calendar:', error, item);
+    }
   }
 
-  // ------------------ Active lecture quadrants under dashboard ------------------
+  // ============================================================================
+  // Active Lecture Cards
+  // ============================================================================
+
+  /** Host element for active lecture cards */
   const activeLecturesHost = document.getElementById('professorActiveLectures');
+
+  /** Map of lecture ID to card element */
   const activeLectureCardsById = new Map();
+
+  /** Map of lecture ID to metadata (name, description) */
   const lectureMetaById = new Map();
 
-  function normalizeStatus(status) {
-    if (status == null) return null;
-    if (typeof status === 'number') return status;
-    return String(status).trim().toLowerCase();
-  }
-
-  // Active == InProgress (string) or 1 (enum value)
-  function isActiveLectureStatus(status) {
-    const s = normalizeStatus(status);
-    return s === 1 || s === 'inprogress' || s === 'in progress';
-  }
-
-  function getJoinUrl(lectureId) {
-    try {
-      return new URL(`/lecture/join/${encodeURIComponent(String(lectureId))}`, window.location.origin).toString();
-    } catch (e) {
-      return `/lecture/join/${encodeURIComponent(String(lectureId))}`;
-    }
-  }
-
+  /**
+   * Caches lecture metadata for later use.
+   * @param {Object} item - The lecture item.
+   */
   function cacheLectureMeta(item) {
     try {
       const id = item?.id ?? item?.Id;
-      if (!id) return;
+      if (!id) {
+        return;
+      }
+
       const key = String(id);
       const name = item?.name ?? item?.Name;
       const description = item?.description ?? item?.Description;
+
       if (name != null || description != null) {
+        const existing = lectureMetaById.get(key);
         lectureMetaById.set(key, {
-          name: name ?? lectureMetaById.get(key)?.name,
-          description: description ?? lectureMetaById.get(key)?.description
+          name: name ?? existing?.name,
+          description: description ?? existing?.description
         });
       }
-    } catch (e) { /* ignore */ }
+    } catch {
+      // Ignore cache errors
+    }
   }
 
-  function ensureQr(el, urlText) {
-    if (!el) return;
-    try { el.innerHTML = ''; } catch (e) { /* ignore */ }
-
-    // Prefer local QRCode generator if present
-    if (window.QRCode) {
-      try {
-        // eslint-disable-next-line no-new
-        new window.QRCode(el, {
-          text: urlText,
-          width: 256,
-          height: 256,
-          correctLevel: window.QRCode.CorrectLevel ? window.QRCode.CorrectLevel.M : undefined
-        });
-        return;
-      } catch (e) { /* fallthrough */ }
+  /**
+   * Ensures a QR code is rendered in the element.
+   * @param {HTMLElement} element - The container element.
+   * @param {string} urlText - The URL to encode.
+   */
+  function ensureQr(element, urlText) {
+    if (!element) {
+      return;
     }
 
-    // Fallback: public QR image generator (keeps UI working even if QRCode lib fails to load)
+    try {
+      element.innerHTML = '';
+    } catch {
+      // Ignore clear errors
+    }
+
+    // Prefer local QRCode generator if present
+    if (globalThis.QRCode) {
+      try {
+        new globalThis.QRCode(element, {
+          text: urlText,
+          width: QR_CODE_SIZE,
+          height: QR_CODE_SIZE,
+          correctLevel: globalThis.QRCode.CorrectLevel ? globalThis.QRCode.CorrectLevel.M : undefined
+        });
+        return;
+      } catch {
+        // Fall through to image fallback
+      }
+    }
+
+    // Fallback: public QR image generator
     try {
       const img = document.createElement('img');
       img.alt = 'QR code';
       img.loading = 'lazy';
       img.referrerPolicy = 'no-referrer';
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(urlText)}`;
-      el.appendChild(img);
-    } catch (e) { /* ignore */ }
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${QR_CODE_SIZE}x${QR_CODE_SIZE}&data=${encodeURIComponent(urlText)}`;
+      element.appendChild(img);
+    } catch {
+      // Ignore QR fallback errors
+    }
   }
 
+  /**
+   * Creates or updates an active lecture card.
+   * @param {Object} item - The lecture item.
+   */
   function upsertActiveLectureCard(item) {
-    if (!activeLecturesHost) return;
+    if (!activeLecturesHost) {
+      return;
+    }
+
     const lectureId = item?.id ?? item?.Id;
-    if (!lectureId) return;
+    if (!lectureId) {
+      return;
+    }
 
     const key = String(lectureId);
     cacheLectureMeta(item);
+
     let card = activeLectureCardsById.get(key);
 
     if (!card) {
@@ -406,9 +783,9 @@ document.addEventListener('DOMContentLoaded', function () {
       // Wire attendee popover button
       const btn = card.querySelector('.pl-att-btn');
       if (btn) {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+        btn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
           openAttendeesPopover(key, btn);
         });
       }
@@ -424,108 +801,183 @@ document.addEventListener('DOMContentLoaded', function () {
     const qrEl = card.querySelector('.pl-qr');
     const idEl = card.querySelector('.pl-id');
 
-    if (titleEl) titleEl.textContent = String(title);
-    if (descEl) descEl.textContent = String(description);
-    if (idEl) idEl.textContent = `Lecture ID (join): ${key}`;
+    if (titleEl) {
+      titleEl.textContent = String(title);
+    }
+    if (descEl) {
+      descEl.textContent = String(description);
+    }
+    if (idEl) {
+      idEl.textContent = `Lecture ID (join): ${key}`;
+    }
+
     ensureQr(qrEl, joinUrl);
   }
 
+  /**
+   * Removes an active lecture card.
+   * @param {string} lectureId - The lecture ID.
+   */
   function removeActiveLectureCard(lectureId) {
-    if (!lectureId) return;
+    if (!lectureId) {
+      return;
+    }
+
     const key = String(lectureId);
     const card = activeLectureCardsById.get(key);
-    if (card && card.parentNode) {
-      try { card.parentNode.removeChild(card); } catch (e) { /* ignore */ }
+
+    if (card?.parentNode) {
+      try {
+        card.remove();
+      } catch {
+        // Ignore removal errors
+      }
     }
+
     activeLectureCardsById.delete(key);
 
     // If popover is currently showing this lecture, close it
     try {
-      if (attendeesPopoverState?.lectureId === key) closeAttendeesPopover();
-    } catch (e) { /* ignore */ }
+      if (attendeesPopoverState?.lectureId === key) {
+        closeAttendeesPopover();
+      }
+    } catch {
+      // Ignore popover close errors
+    }
   }
 
-  // ------------------ Active lecture attendee totals + attendee list popover ------------------
+  // ============================================================================
+  // Attendee Management
+  // ============================================================================
+
+  /** Set of lecture IDs currently fetching attendee totals */
   const attendeeTotalsInFlight = new Set();
 
-  async function fetchLectureAttendeesPage(lectureId, page, pageSize) {
-    const candidates = [
-      `/api/lectureAttendees/${encodeURIComponent(String(lectureId))}?page=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}`,
-      `/api/lectureAttendees/${encodeURIComponent(String(lectureId))}?pageNumber=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}`,
-    ];
+  /**
+   * Fetches a page of attendees for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {number} page - The page number.
+   * @param {number} pageSize - The page size.
+   * @param {string|null} searchFilter - Optional search filter.
+   * @returns {Promise<{items: Array, total: number}|null>} The page data or null.
+   */
+  async function fetchLectureAttendeesPage(lectureId, page, pageSize, searchFilter = null) {
+    let baseUrl = `/api/lectureAttendees/${encodeURIComponent(String(lectureId))}?page=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}`;
 
-    for (const url of candidates) {
-      try {
-        const resp = await fetch(url, {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: { 'Accept': 'application/json' }
-        });
-
-        if (resp.status === 404) continue;
-        if (!resp.ok) return null;
-
-        const data = await resp.json();
-        const items = data?.items ?? data?.Items ?? [];
-        const total = data?.total ?? data?.Total ?? 0;
-        return { items: Array.isArray(items) ? items : [], total: Number(total || 0) };
-      } catch (e) {
-        // try next
-      }
+    if (searchFilter?.trim()) {
+      baseUrl += `&searchFilter=${encodeURIComponent(searchFilter.trim())}`;
     }
-    return null;
-  }
-
-  async function fetchUserInfoBatch(ids) {
-    const distinct = Array.from(new Set((ids || []).filter(Boolean).map(String)));
-    if (distinct.length === 0) return new Map();
-
-    const qs = new URLSearchParams();
-    for (const id of distinct) qs.append('ids', id);
 
     try {
-      let data = null;
-      const resp = await fetch(`/api/users/userInfo?${qs.toString()}`, {
+      const response = await fetch(baseUrl, {
         method: 'GET',
         credentials: 'same-origin',
         headers: { 'Accept': 'application/json' }
       });
-      if (!resp.ok) return new Map();
-      data = await resp.json();
 
-      if (!data) return new Map();
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      const items = data?.items ?? data?.Items ?? [];
+      const total = data?.total ?? data?.Total ?? 0;
+
+      return {
+        items: Array.isArray(items) ? items : [],
+        total: Number(total || 0)
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetches user info for a batch of user IDs.
+   * @param {Array<string>} ids - The user IDs.
+   * @returns {Promise<Map<string, {name: string, email: string}>>} Map of user info.
+   */
+  async function fetchUserInfoBatch(ids) {
+    const distinct = Array.from(new Set((ids || []).filter(Boolean).map(String)));
+
+    if (distinct.length === 0) {
+      return new Map();
+    }
+
+    const queryString = new URLSearchParams();
+    for (const id of distinct) {
+      queryString.append('ids', id);
+    }
+
+    try {
+      const response = await fetch(`/api/users/userInfo?${queryString.toString()}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return new Map();
+      }
+
+      const data = await response.json();
+
+      if (!data) {
+        return new Map();
+      }
+
       const arr = Array.isArray(data) ? data : (data?.items ?? data?.Items ?? []);
       const map = new Map();
-      for (const u of arr) {
-        const id = u?.id ?? u?.Id;
-        if (!id) continue;
+
+      for (const user of arr) {
+        const id = user?.id ?? user?.Id;
+        if (!id) {
+          continue;
+        }
         map.set(String(id), {
-          name: u?.name ?? u?.Name ?? '',
-          email: u?.email ?? u?.Email ?? ''
+          name: user?.name ?? user?.Name ?? '',
+          email: user?.email ?? user?.Email ?? ''
         });
       }
+
       return map;
-    } catch (e) {
+    } catch {
       return new Map();
     }
   }
 
+  /**
+   * Polls attendee counts for all active lecture cards.
+   */
   async function pollActiveLectureAttendeeCounts() {
-    if (!activeLecturesHost) return;
+    if (!activeLecturesHost) {
+      return;
+    }
+
     const ids = Array.from(activeLectureCardsById.keys());
-    if (ids.length === 0) return;
+
+    if (ids.length === 0) {
+      return;
+    }
 
     for (const lectureId of ids) {
-      if (attendeeTotalsInFlight.has(lectureId)) continue;
+      if (attendeeTotalsInFlight.has(lectureId)) {
+        continue;
+      }
+
       attendeeTotalsInFlight.add(lectureId);
-      (async () => {
+
+      (async function () {
         try {
           const page = await fetchLectureAttendeesPage(lectureId, 0, 1);
           const total = page?.total;
           const card = activeLectureCardsById.get(String(lectureId));
+
           if (card) {
-            const el = card.querySelector('.pl-att-count');
-            if (el && typeof total === 'number' && !Number.isNaN(total)) el.textContent = `Attendees: ${total}`;
+            const countEl = card.querySelector('.pl-att-count');
+            if (countEl && typeof total === 'number' && !Number.isNaN(total)) {
+              countEl.textContent = `Attendees: ${total}`;
+            }
           }
 
           // If popover is open for this lecture, update its header total
@@ -537,7 +989,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateAttendeesLoadMoreVisibility();
               }
             }
-          } catch (e) { /* ignore */ }
+          } catch {
+            // Ignore popover update errors
+          }
         } finally {
           attendeeTotalsInFlight.delete(lectureId);
         }
@@ -545,185 +999,289 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Poll every 60 seconds
+  // Start polling
   try {
-    setInterval(pollActiveLectureAttendeeCounts, 60000);
-  } catch (e) { /* ignore */ }
+    setInterval(pollActiveLectureAttendeeCounts, ATTENDEE_POLL_INTERVAL_MS);
+  } catch {
+    // Ignore interval setup errors
+  }
 
-  // ---- Popover state + UI ----
+  // ============================================================================
+  // Attendees Popover
+  // ============================================================================
+
+  /** The attendees popover element */
   let attendeesPopoverEl = null;
+
+  /** Current popover state */
   let attendeesPopoverState = null;
 
+  /**
+   * Updates the visibility of the load more button.
+   * @param {number|null} lastPageItemCount - Number of items in the last loaded page.
+   */
   function updateAttendeesLoadMoreVisibility(lastPageItemCount = null) {
-    if (!attendeesPopoverState) return;
+    if (!attendeesPopoverState) {
+      return;
+    }
+
     const { loadMoreBtn, loadedCount, totalKnown, pageSize } = attendeesPopoverState;
-    if (!loadMoreBtn) return;
+
+    if (!loadMoreBtn) {
+      return;
+    }
 
     const totalIsKnown = typeof totalKnown === 'number' && !Number.isNaN(totalKnown);
     const doneByTotal = totalIsKnown && loadedCount >= totalKnown;
     const doneByPage = typeof lastPageItemCount === 'number' && lastPageItemCount < pageSize;
     const done = doneByTotal || doneByPage;
 
-    loadMoreBtn.style.display = done ? 'none' : 'inline-flex';
-    if (done) loadMoreBtn.disabled = true;
+    loadMoreBtn.style.display = done ? 'none' : 'flex';
+
+    if (done) {
+      loadMoreBtn.disabled = true;
+    }
   }
 
+  /**
+   * Ensures the attendees popover element exists.
+   * @returns {HTMLElement} The popover element.
+   */
   function ensureAttendeesPopover() {
-    if (attendeesPopoverEl) return attendeesPopoverEl;
+    if (attendeesPopoverEl) {
+      return attendeesPopoverEl;
+    }
 
     const pop = document.createElement('div');
-    pop.id = 'attendeesPopover';
-    pop.className = 'att-popover';
+    pop.id = 'attendeesModal';
+    pop.className = 'att-modal';
     pop.style.display = 'none';
     pop.innerHTML = `
-      <div class="att-head">
-        <div class="att-title">Attendees</div>
-        <button type="button" class="att-close" aria-label="Close">×</button>
+      <div class="att-modal-backdrop" data-close-att></div>
+      <div class="att-modal-content">
+        <div class="att-modal-header">
+          <h2 class="att-modal-title">Attendees</h2>
+          <button type="button" class="att-modal-close" data-close-att aria-label="Close">✕</button>
+        </div>
+        <div class="att-search-wrap">
+          <input type="text" class="att-search-input" placeholder="Search by name or email..." aria-label="Search attendees" />
+        </div>
+        <div class="att-sub" aria-live="polite"></div>
+        <div class="att-modal-body">
+          <div class="att-list" role="list"></div>
+        </div>
+        <div class="att-modal-footer">
+          <button type="button" class="att-load-more" aria-label="Load more">
+            <span class="plus-icon">+</span>
+            <span>Load more</span>
+          </button>
+        </div>
       </div>
-      <div class="att-sub" aria-live="polite"></div>
-      <div class="att-list" role="list"></div>
-      <button type="button" class="att-load-more" aria-label="Load more">+</button>
     `;
     document.body.appendChild(pop);
 
-    const closeBtn = pop.querySelector('.att-close');
-    if (closeBtn) closeBtn.addEventListener('click', (e) => { e.preventDefault(); closeAttendeesPopover(); });
-
-    // click inside shouldn't close
-    pop.addEventListener('click', (e) => e.stopPropagation());
-
-    // close on outside click
-    document.addEventListener('click', (e) => {
-      if (!attendeesPopoverEl || attendeesPopoverEl.style.display === 'none') return;
-      if (!attendeesPopoverEl.contains(e.target)) closeAttendeesPopover();
+    // Close button handlers
+    pop.querySelectorAll('[data-close-att]').forEach(function (el) {
+      el.addEventListener('click', function (event) {
+        event.preventDefault();
+        closeAttendeesPopover();
+      });
     });
 
-    // close on escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeAttendeesPopover();
+    // Clicks inside content shouldn't close
+    const content = pop.querySelector('.att-modal-content');
+    if (content) {
+      content.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+    }
+
+    // Close on escape
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && attendeesPopoverEl && attendeesPopoverEl.style.display !== 'none') {
+        closeAttendeesPopover();
+      }
     });
 
     attendeesPopoverEl = pop;
     return pop;
   }
 
-  function positionAttendeesPopover(anchorEl) {
-    if (!attendeesPopoverEl || !anchorEl) return;
-    attendeesPopoverEl.style.position = 'fixed';
-    attendeesPopoverEl.style.zIndex = 22000;
-
-    const r = anchorEl.getBoundingClientRect();
-    const margin = 10;
-    const desiredTop = r.bottom + 8;
-    const desiredLeft = r.left;
-
-    // Temporarily show to measure
-    attendeesPopoverEl.style.display = 'block';
-    const pw = attendeesPopoverEl.offsetWidth;
-    const ph = attendeesPopoverEl.offsetHeight;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let top = desiredTop;
-    let left = desiredLeft;
-
-    if (left + pw + margin > vw) left = Math.max(margin, vw - pw - margin);
-    if (left < margin) left = margin;
-
-    if (top + ph + margin > vh) {
-      // try above the anchor
-      top = r.top - ph - 8;
-      if (top < margin) top = Math.max(margin, vh - ph - margin);
+  /**
+   * Closes the attendees popover.
+   */
+  function closeAttendeesPopover() {
+    if (!attendeesPopoverEl) {
+      return;
     }
 
-    attendeesPopoverEl.style.top = `${top}px`;
-    attendeesPopoverEl.style.left = `${left}px`;
-  }
-
-  function closeAttendeesPopover() {
-    if (!attendeesPopoverEl) return;
     attendeesPopoverEl.style.display = 'none';
+    attendeesPopoverEl.classList.remove('open');
+    document.body.style.overflow = '';
     attendeesPopoverState = null;
   }
 
+  /**
+   * Updates the attendees popover header with current counts.
+   */
   function updateAttendeesPopoverHeader() {
-    if (!attendeesPopoverState) return;
-    const { subEl, loadedCount, totalKnown } = attendeesPopoverState;
-    if (!subEl) return;
-    const totalTxt = (typeof totalKnown === 'number' && !Number.isNaN(totalKnown)) ? totalKnown : '—';
-    subEl.textContent = `Loaded ${loadedCount} / ${totalTxt}`;
+    if (!attendeesPopoverState) {
+      return;
+    }
+
+    const { subEl, loadedCount, totalKnown, titleEl, showTotalInTitle } = attendeesPopoverState;
+
+    if (!subEl) {
+      return;
+    }
+
+    const totalText = (typeof totalKnown === 'number' && !Number.isNaN(totalKnown))
+      ? totalKnown
+      : '—';
+
+    subEl.textContent = `Loaded ${loadedCount} / ${totalText}`;
+
+    // Update title with total if requested
+    if (showTotalInTitle && titleEl) {
+      const totalDisplay = (typeof totalKnown === 'number' && !Number.isNaN(totalKnown))
+        ? totalKnown
+        : '';
+
+      titleEl.textContent = totalDisplay === ''
+        ? 'Attendees'
+        : `Attendees (${totalDisplay})`;
+    }
   }
 
-  async function loadMoreAttendees() {
-    if (!attendeesPopoverState || attendeesPopoverState.loading) return;
-    attendeesPopoverState.loading = true;
+  /**
+   * Sorts attendee items by time joined, then by user ID.
+   * @param {Array} items - The attendee items.
+   * @returns {Array} The sorted items.
+   */
+  function sortAttendeeItems(items) {
+    return items.slice().sort(function (a, b) {
+      const timeA = a?.timeJoined ?? a?.TimeJoined;
+      const timeB = b?.timeJoined ?? b?.TimeJoined;
+      const dateA = timeA ? Date.parse(timeA) : Number.NaN;
+      const dateB = timeB ? Date.parse(timeB) : Number.NaN;
+
+      if (!Number.isNaN(dateA) && !Number.isNaN(dateB) && dateA !== dateB) {
+        return dateA - dateB;
+      }
+
+      const userIdA = String(a?.userId ?? a?.UserId ?? '');
+      const userIdB = String(b?.userId ?? b?.UserId ?? '');
+      return userIdA.localeCompare(userIdB);
+    });
+  }
+
+  /**
+   * Creates an attendee row element.
+   * @param {Object} attendee - The attendee data.
+   * @param {Map} userMap - Map of user info.
+   * @returns {HTMLElement|null} The row element or null.
+   */
+  function createAttendeeRow(attendee, userMap) {
+    const userId = String(attendee?.userId ?? attendee?.UserId ?? '');
+
+    if (!userId) {
+      return null;
+    }
+
+    const joinedRaw = attendee?.timeJoined ?? attendee?.TimeJoined;
+    let joinedText = '';
+
     try {
-      const { lectureId, nextPage, pageSize, listEl, loadMoreBtn } = attendeesPopoverState;
-      if (!lectureId || !listEl) return;
+      joinedText = joinedRaw ? new Date(joinedRaw).toLocaleString() : '';
+    } catch {
+      joinedText = '';
+    }
 
-      if (loadMoreBtn) loadMoreBtn.disabled = true;
+    const info = userMap.get(userId);
+    const name = info?.name || userId;
+    const email = info?.email || '';
 
-      const page = await fetchLectureAttendeesPage(lectureId, nextPage, pageSize);
-      if (!page) return;
+    const row = document.createElement('a');
+    row.className = 'att-item';
+    row.href = `/profile/view/${encodeURIComponent(userId)}`;
+    row.innerHTML = `
+      <div class="att-left">
+        <div class="att-name">${escapeHtml(name)}</div>
+        <div class="att-email">${escapeHtml(email)}</div>
+      </div>
+      <div class="att-time">${escapeHtml(joinedText)}</div>
+    `;
 
-      if (typeof page.total === 'number' && !Number.isNaN(page.total)) attendeesPopoverState.totalKnown = page.total;
+    return row;
+  }
+
+  /**
+   * Loads more attendees into the popover.
+   */
+  async function loadMoreAttendees() {
+    if (!attendeesPopoverState || attendeesPopoverState.loading) {
+      return;
+    }
+
+    attendeesPopoverState.loading = true;
+
+    try {
+      const { lectureId, nextPage, pageSize, listEl, loadMoreBtn, searchFilter } = attendeesPopoverState;
+
+      if (!lectureId || !listEl) {
+        return;
+      }
+
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+      }
+
+      const page = await fetchLectureAttendeesPage(lectureId, nextPage, pageSize, searchFilter);
+
+      if (!page) {
+        return;
+      }
+
+      if (typeof page.total === 'number' && !Number.isNaN(page.total)) {
+        attendeesPopoverState.totalKnown = page.total;
+      }
 
       const rawItems = Array.isArray(page.items) ? page.items : [];
-      const items = rawItems.slice().sort((a, b) => {
-        const ta = a?.timeJoined ?? a?.TimeJoined;
-        const tb = b?.timeJoined ?? b?.TimeJoined;
-        const da = ta ? Date.parse(ta) : NaN;
-        const db = tb ? Date.parse(tb) : NaN;
-        if (!Number.isNaN(da) && !Number.isNaN(db) && da !== db) return da - db;
-        const ua = String(a?.userId ?? a?.UserId ?? '');
-        const ub = String(b?.userId ?? b?.UserId ?? '');
-        return ua.localeCompare(ub);
-      });
+      const items = sortAttendeeItems(rawItems);
 
       if (items.length === 0 && attendeesPopoverState.loadedCount === 0) {
-        if (attendeesPopoverState.subEl) attendeesPopoverState.subEl.textContent = 'No attendees yet.';
+        if (attendeesPopoverState.subEl) {
+          attendeesPopoverState.subEl.textContent = 'No attendees.';
+        }
         updateAttendeesLoadMoreVisibility(0);
         return;
       }
 
-      const userIds = items.map(x => x?.userId ?? x?.UserId).filter(Boolean);
+      const userIds = items.map(function (x) {
+        return x?.userId ?? x?.UserId;
+      }).filter(Boolean);
+
       const userMap = await fetchUserInfoBatch(userIds);
 
       let added = 0;
-      for (const it of items) {
-        const uid = String(it?.userId ?? it?.UserId ?? '');
-        if (!uid) continue;
-        const joinedRaw = it?.timeJoined ?? it?.TimeJoined;
-        let joinedText = '';
-        try {
-          joinedText = joinedRaw ? new Date(joinedRaw).toLocaleString() : '';
-        } catch (e) { joinedText = ''; }
 
-        const info = userMap.get(uid);
-        const name = info?.name || uid;
-        const email = info?.email || '';
+      for (const attendee of items) {
+        const row = createAttendeeRow(attendee, userMap);
 
-        const row = document.createElement('div');
-        row.className = 'att-item';
-        row.innerHTML = `
-          <div class="att-left">
-            <div class="att-name">${escapeHtml(name)}</div>
-            <div class="att-email">${escapeHtml(email)}</div>
-          </div>
-          <div class="att-time">${escapeHtml(joinedText)}</div>
-        `;
-        listEl.appendChild(row);
-        attendeesPopoverState.loadedCount++;
-        added++;
+        if (row) {
+          listEl.appendChild(row);
+          attendeesPopoverState.loadedCount++;
+          added++;
+        }
       }
 
       attendeesPopoverState.nextPage = nextPage + 1;
       updateAttendeesPopoverHeader();
-
       updateAttendeesLoadMoreVisibility(added);
     } finally {
       if (attendeesPopoverState) {
         attendeesPopoverState.loading = false;
+
         if (attendeesPopoverState.loadMoreBtn && attendeesPopoverState.loadMoreBtn.style.display !== 'none') {
           attendeesPopoverState.loadMoreBtn.disabled = false;
         }
@@ -731,154 +1289,358 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function openAttendeesPopover(lectureId, anchorEl) {
+  /**
+   * Opens the attendees popover for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {HTMLElement|null} anchorEl - The anchor element (unused, modal is centered).
+   * @param {boolean} showTotalInTitle - Whether to show total in title.
+   */
+  function openAttendeesPopover(lectureId, anchorEl, showTotalInTitle = false) {
     const pop = ensureAttendeesPopover();
     const listEl = pop.querySelector('.att-list');
     const subEl = pop.querySelector('.att-sub');
     const loadMoreBtn = pop.querySelector('.att-load-more');
+    const searchInput = pop.querySelector('.att-search-input');
+    const titleEl = pop.querySelector('.att-modal-title');
 
-    if (listEl) listEl.innerHTML = '';
-    if (subEl) subEl.textContent = 'Loading…';
+    if (listEl) {
+      listEl.innerHTML = '';
+    }
+    if (subEl) {
+      subEl.textContent = 'Loading…';
+    }
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    if (titleEl) {
+      titleEl.textContent = 'Attendees';
+    }
     if (loadMoreBtn) {
       loadMoreBtn.disabled = false;
-      loadMoreBtn.style.display = 'inline-flex';
-      loadMoreBtn.onclick = (e) => { e.preventDefault(); loadMoreAttendees(); };
+      loadMoreBtn.style.display = 'flex';
+      loadMoreBtn.onclick = function (event) {
+        event.preventDefault();
+        loadMoreAttendees();
+      };
     }
 
     attendeesPopoverState = {
       lectureId: String(lectureId),
       nextPage: 0,
-      pageSize: 20,
+      pageSize: ATTENDEE_PAGE_SIZE,
       loadedCount: 0,
       totalKnown: null,
       loading: false,
-      listEl,
-      subEl,
-      loadMoreBtn,
-      totalEl: subEl
+      listEl: listEl,
+      subEl: subEl,
+      loadMoreBtn: loadMoreBtn,
+      totalEl: subEl,
+      titleEl: titleEl,
+      showTotalInTitle: showTotalInTitle,
+      searchFilter: '',
+      searchDebounceTimer: null
     };
+
+    // Setup search input with debounce
+    if (searchInput) {
+      searchInput.oninput = function (event) {
+        if (!attendeesPopoverState) {
+          return;
+        }
+
+        const value = event.target.value;
+
+        // Clear previous debounce timer
+        if (attendeesPopoverState.searchDebounceTimer) {
+          clearTimeout(attendeesPopoverState.searchDebounceTimer);
+        }
+
+        // Set new debounce timer
+        attendeesPopoverState.searchDebounceTimer = setTimeout(function () {
+          if (!attendeesPopoverState) {
+            return;
+          }
+          attendeesPopoverState.searchFilter = value;
+          attendeesPopoverState.nextPage = 0;
+          attendeesPopoverState.loadedCount = 0;
+          attendeesPopoverState.totalKnown = null;
+
+          if (listEl) {
+            listEl.innerHTML = '';
+          }
+          if (subEl) {
+            subEl.textContent = 'Searching…';
+          }
+
+          loadMoreAttendees();
+        }, SEARCH_DEBOUNCE_MS);
+      };
+    }
 
     updateAttendeesPopoverHeader();
 
-    pop.style.display = 'block';
-    positionAttendeesPopover(anchorEl);
+    pop.style.display = 'flex';
+    pop.classList.add('open');
+    document.body.style.overflow = 'hidden';
 
-    // Load first page (top to bottom)
+    // Load first page
     loadMoreAttendees();
   }
 
+  // ============================================================================
+  // Calendar Status Pill Updates
+  // ============================================================================
+
+  /**
+   * Updates status pills in the calendar for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {number|string} statusVal - The new status value.
+   */
   function updateRenderedCalendarStatusPill(lectureId, statusVal) {
-    if (!lectureId) return;
+    if (!lectureId) {
+      return;
+    }
+
     try {
       const raw = String(lectureId);
-      const esc = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(raw) : raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      const pills = document.querySelectorAll(`.event-status-pill[data-ev-id="${esc}"]`);
-      if (!pills || pills.length === 0) return;
+      const escaped = (typeof CSS !== 'undefined' && CSS.escape)
+        ? CSS.escape(raw)
+        : raw.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
-      let label = '';
-      const lower = String(statusVal).toLowerCase();
-      let cls = null;
-      if (lower === 'scheduled' || statusVal === 0) { cls = 'status-scheduled'; label = 'Scheduled'; }
-      else if (lower === 'inprogress' || statusVal === 1) { cls = 'status-inprogress'; label = 'InProgress'; }
-      else if (lower === 'ended' || statusVal === 2) { cls = 'status-ended'; label = 'Ended'; }
-      else if (lower === 'canceled' || statusVal === 3) { cls = 'status-canceled'; label = 'Canceled'; }
+      const pills = document.querySelectorAll(`.event-status-pill[data-ev-id="${escaped}"]`);
 
-      pills.forEach((pill) => {
+      if (!pills || pills.length === 0) {
+        return;
+      }
+
+      const label = statusToLabel(statusVal);
+      const normalized = normalizeStatus(statusVal);
+
+      let cssClass = null;
+      if (normalized === LectureStatus.SCHEDULED || normalized === 'scheduled') {
+        cssClass = 'status-scheduled';
+      } else if (normalized === LectureStatus.IN_PROGRESS || normalized === 'inprogress') {
+        cssClass = 'status-inprogress';
+      } else if (normalized === LectureStatus.ENDED || normalized === 'ended') {
+        cssClass = 'status-ended';
+      } else if (normalized === LectureStatus.CANCELED || normalized === 'canceled') {
+        cssClass = 'status-canceled';
+      }
+
+      pills.forEach(function (pill) {
         pill.classList.remove('status-scheduled', 'status-inprogress', 'status-ended', 'status-canceled');
-        if (cls) pill.classList.add(cls);
+
+        if (cssClass) {
+          pill.classList.add(cssClass);
+        }
+
         pill.textContent = label;
       });
-    } catch (e) { /* ignore */ }
+    } catch {
+      // Ignore status pill update errors
+    }
   }
 
-  // register month-change loader with AttendanceCalendar once it is available
+  // ============================================================================
+  // Calendar Registration
+  // ============================================================================
+
+  /**
+   * Registers with the calendar component for lazy loading.
+   */
   (function ensureCalendarRegistration() {
     let checks = 0;
-    const maxChecks = 200; // ~10s at 50ms
-    const interval = setInterval(() => {
+
+    const interval = setInterval(function () {
       checks++;
-      if (window.AttendanceCalendar && typeof window.AttendanceCalendar.onViewChange === 'function') {
+
+      if (globalThis.AttendanceCalendar && typeof globalThis.AttendanceCalendar.onViewChange === 'function') {
         clearInterval(interval);
 
-        // register loader for view changes
-        window.AttendanceCalendar.onViewChange(async (monthKey, viewDate) => {
+        // Register loader for view changes
+        globalThis.AttendanceCalendar.onViewChange(async function (monthKey, viewDate) {
           try {
-            if (typeof window.AttendanceCalendar.isMonthLoaded === 'function' && window.AttendanceCalendar.isMonthLoaded(monthKey)) return;
-            // mark as loading to prevent duplicate concurrent loads
-            if (typeof window.AttendanceCalendar.markMonthLoading === 'function') window.AttendanceCalendar.markMonthLoading(monthKey);
+            if (typeof globalThis.AttendanceCalendar.isMonthLoaded === 'function' &&
+                globalThis.AttendanceCalendar.isMonthLoaded(monthKey)) {
+              return;
+            }
+
+            // Mark as loading to prevent duplicate concurrent loads
+            if (typeof globalThis.AttendanceCalendar.markMonthLoading === 'function') {
+              globalThis.AttendanceCalendar.markMonthLoading(monthKey);
+            }
+
             const now = new Date();
-            const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) - (viewDate.getFullYear() * 12 + viewDate.getMonth());
+            const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) -
+                              (viewDate.getFullYear() * 12 + viewDate.getMonth());
+
             await loadProfessorLectures({ fromMonthsAgo: monthsAgo });
-            if (typeof window.AttendanceCalendar.markMonthLoaded === 'function') window.AttendanceCalendar.markMonthLoaded(monthKey);
-          } catch (e) { console.error(e); }
+
+            if (typeof globalThis.AttendanceCalendar.markMonthLoaded === 'function') {
+              globalThis.AttendanceCalendar.markMonthLoaded(monthKey);
+            }
+          } catch (error) {
+            console.error('[ProfessorHome] Calendar view change error:', error);
+          }
         });
 
-        // initial load for previous, current and next months so days visible in the grid have events
-        (async () => {
+        // Initial load for previous, current and next months
+        (async function () {
           try {
             const now = new Date();
             const cur = new Date(now.getFullYear(), now.getMonth(), 1);
             const prev = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
             const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
             const months = [prev, cur, next];
-            for (const d of months) {
-              const monthKey = `${d.getFullYear()}-${d.getMonth()+1}`;
-              if (typeof window.AttendanceCalendar.isMonthLoaded === 'function' && window.AttendanceCalendar.isMonthLoaded(monthKey)) continue;
-              if (typeof window.AttendanceCalendar.markMonthLoading === 'function') window.AttendanceCalendar.markMonthLoading(monthKey);
-              const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) - (d.getFullYear() * 12 + d.getMonth());
+
+            for (const monthDate of months) {
+              const monthKey = `${monthDate.getFullYear()}-${monthDate.getMonth() + 1}`;
+
+              if (typeof globalThis.AttendanceCalendar.isMonthLoaded === 'function' &&
+                  globalThis.AttendanceCalendar.isMonthLoaded(monthKey)) {
+                continue;
+              }
+
+              if (typeof globalThis.AttendanceCalendar.markMonthLoading === 'function') {
+                globalThis.AttendanceCalendar.markMonthLoading(monthKey);
+              }
+
+              const monthsAgo = (now.getFullYear() * 12 + now.getMonth()) -
+                                (monthDate.getFullYear() * 12 + monthDate.getMonth());
+
               await loadProfessorLectures({ fromMonthsAgo: monthsAgo });
-              if (typeof window.AttendanceCalendar.markMonthLoaded === 'function') window.AttendanceCalendar.markMonthLoaded(monthKey);
+
+              if (typeof globalThis.AttendanceCalendar.markMonthLoaded === 'function') {
+                globalThis.AttendanceCalendar.markMonthLoaded(monthKey);
+              }
             }
-          } catch (e) { console.error(e); }
+          } catch (error) {
+            console.error('[ProfessorHome] Initial calendar load error:', error);
+          }
         })();
       }
 
-      if (checks >= maxChecks) {
+      if (checks >= CALENDAR_MAX_CHECKS) {
         clearInterval(interval);
       }
-    }, 50);
+    }, CALENDAR_CHECK_INTERVAL_MS);
   })();
 
-  // ------------------ Lecture action modal handler ------------------
-  // Map to track lecture statuses by id
-  window._lectureStatusMap = window._lectureStatusMap || {};
+  // ============================================================================
+  // Lecture Popup (Calendar Event Click Handler)
+  // ============================================================================
 
-  // Expose handler for calendar event clicks — show small popup above the calendar event element
-  window.onCalendarEventClick = function(ev) {
-    try {
-      // find the DOM node for this event
-      const el = document.querySelector(`[data-event-id="${ev.id}"]`);
-      // create popup if needed
-      let popup = document.getElementById('lecturePopup');
-      if (!popup) {
-        popup = document.createElement('div');
-        popup.id = 'lecturePopup';
-        popup.className = 'lecture-popup';
-        popup.innerHTML = `
-          <button type="button" class="lp-close" aria-label="Close">×</button>
-          <div class="lp-body">
-            <div class="lp-title"></div>
-            <div class="lp-time small text-muted"></div>
-            <div class="lp-row" style="display:flex;align-items:center;gap:8px;">
-              <div class="lp-desc small" style="flex:1"></div>
-            </div>
-            <div class="lp-status small mt-1"></div>
-            <div class="lp-actions mt-2"></div>
+  // Map to track lecture statuses by id
+  globalThis._lectureStatusMap = globalThis._lectureStatusMap || {};
+
+  /**
+   * Creates an action button for the lecture popup.
+   * @param {string} label - The button label.
+   * @param {string} cssClass - The CSS class.
+   * @param {Function} handler - The click handler.
+   * @returns {HTMLElement} The button element.
+   */
+  function createActionButton(label, cssClass, handler) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = cssClass || 'btn-inline';
+    button.textContent = label;
+    button.addEventListener('click', handler);
+    return button;
+  }
+
+  /**
+   * Creates the lecture popup element if it doesn't exist.
+   * @returns {HTMLElement} The popup element.
+   */
+  function ensureLecturePopup() {
+    let popup = document.getElementById('lecturePopup');
+
+    if (!popup) {
+      popup = document.createElement('div');
+      popup.id = 'lecturePopup';
+      popup.className = 'lecture-popup';
+      popup.innerHTML = `
+        <button type="button" class="lp-close" aria-label="Close">×</button>
+        <div class="lp-body">
+          <div class="lp-title"></div>
+          <div class="lp-time small text-muted"></div>
+          <div class="lp-row" style="display:flex;align-items:center;gap:8px;">
+            <div class="lp-desc small" style="flex:1"></div>
           </div>
-        `;
-        document.body.appendChild(popup);
-        // close on clicking the close button
-        const closeBtn = popup.querySelector('.lp-close');
-        if (closeBtn) {
-          closeBtn.addEventListener('click', (ev) => { ev.stopPropagation(); try { popup.style.display = 'none'; } catch(e){} });
-        }
-        // stop clicks inside popup from bubbling up (so calendar/popover doesn't close)
-        popup.addEventListener('click', (ev) => { ev.stopPropagation(); });
-        // close on outside click
-        document.addEventListener('click', (e) => {
-          if (!popup.contains(e.target)) popup.style.display = 'none';
+          <div class="lp-status small mt-1"></div>
+          <div class="lp-actions mt-2"></div>
+        </div>
+      `;
+      document.body.appendChild(popup);
+
+      // Close on clicking the close button
+      const closeBtn = popup.querySelector('.lp-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function (event) {
+          event.stopPropagation();
+          try {
+            popup.style.display = 'none';
+          } catch {
+            // Ignore close errors
+          }
         });
       }
+
+      // Stop clicks inside popup from bubbling
+      popup.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+
+      // Close on outside click
+      document.addEventListener('click', function (event) {
+        if (!popup.contains(event.target)) {
+          popup.style.display = 'none';
+        }
+      });
+    }
+
+    return popup;
+  }
+
+  /**
+   * Positions the lecture popup relative to an element.
+   * @param {HTMLElement} popup - The popup element.
+   * @param {HTMLElement|null} anchorEl - The anchor element.
+   */
+  function positionLecturePopup(popup, anchorEl) {
+    popup.style.display = 'block';
+    popup.style.position = 'fixed';
+    popup.style.zIndex = '20000';
+
+    if (anchorEl) {
+      const rect = anchorEl.getBoundingClientRect();
+      const top = rect.top - popup.offsetHeight - 8;
+      const left = rect.left + (rect.width - popup.offsetWidth) / 2;
+      popup.style.top = `${Math.max(8, top)}px`;
+      popup.style.left = `${Math.max(8, left)}px`;
+    } else {
+      // Fallback: position near calendar popover
+      const calendarPopover = document.getElementById('calendarPopover');
+      if (calendarPopover) {
+        const popRect = calendarPopover.getBoundingClientRect();
+        const top = popRect.top - popup.offsetHeight - 8;
+        const left = popRect.left + (popRect.width - popup.offsetWidth) / 2;
+        popup.style.top = `${Math.max(8, top)}px`;
+        popup.style.left = `${Math.max(8, left)}px`;
+      }
+    }
+  }
+
+  /**
+   * Handles calendar event clicks to show the lecture popup.
+   * @param {Object} ev - The event object.
+   */
+  globalThis.onCalendarEventClick = function (ev) {
+    try {
+      // Find the DOM node for this event
+      const eventEl = document.querySelector(`[data-event-id="${ev.id}"]`);
+      const popup = ensureLecturePopup();
 
       const titleEl = popup.querySelector('.lp-title');
       const timeEl = popup.querySelector('.lp-time');
@@ -891,91 +1653,125 @@ document.addEventListener('DOMContentLoaded', function () {
       timeEl.textContent = `${new Date(ev.start).toLocaleString()} — ${new Date(ev.end).toLocaleString()}`;
 
       const id = ev.id;
-      const current = window._lectureStatusMap && window._lectureStatusMap[id] !== undefined ? window._lectureStatusMap[id] : (ev.status ?? ev.Status);
-      statusEl.textContent = `Status: ${current ?? 'Unknown'}`;
+      const current = (globalThis._lectureStatusMap?.[id] !== undefined)
+        ? globalThis._lectureStatusMap[id]
+        : (ev.status ?? ev.Status);
 
+      statusEl.textContent = `Status: ${statusToLabel(current)}`;
 
-
-
-      // clear previous action buttons so they don't accumulate
-      try { actionsEl.innerHTML = ''; } catch (e) { /* ignore */ }
-
-      function makeBtn(label, cls, fn) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = cls || 'btn-inline';
-        b.textContent = label;
-        b.addEventListener('click', fn);
-        return b;
+      // Clear previous action buttons
+      try {
+        actionsEl.innerHTML = '';
+      } catch {
+        // Ignore clear errors
       }
 
-      const curLower = (String(current) || '').toLowerCase();
-      if (curLower === 'scheduled' || current === 0) {
-        actionsEl.appendChild(makeBtn('Start', 'btn-inline', async () => await doStatusChange(id, 1, popup)));
-        actionsEl.appendChild(makeBtn('Cancel', 'btn-inline', async () => await doStatusChange(id, 3, popup)));
-      } else if (curLower === 'inprogress' || current === 1) {
-        actionsEl.appendChild(makeBtn('End', 'btn-inline', async () => await doStatusChange(id, 2, popup)));
+      const currentNormalized = normalizeStatus(current);
+
+      if (currentNormalized === LectureStatus.SCHEDULED || currentNormalized === 'scheduled') {
+        actionsEl.appendChild(createActionButton('Start', 'btn-inline', async function () {
+          await doStatusChange(id, LectureStatus.IN_PROGRESS, popup);
+        }));
+        actionsEl.appendChild(createActionButton('Cancel', 'btn-inline', async function () {
+          await doStatusChange(id, LectureStatus.CANCELED, popup);
+        }));
+      } else if (currentNormalized === LectureStatus.IN_PROGRESS || currentNormalized === 'inprogress') {
+        actionsEl.appendChild(createActionButton('End', 'btn-inline', async function () {
+          await doStatusChange(id, LectureStatus.ENDED, popup);
+        }));
+      } else if (currentNormalized === LectureStatus.ENDED || currentNormalized === 'ended') {
+        actionsEl.appendChild(createActionButton('View Attendees', 'btn-inline', function () {
+          popup.style.display = 'none';
+          openAttendeesPopover(id, null, true);
+        }));
+      } else if (currentNormalized === LectureStatus.CANCELED || currentNormalized === 'canceled') {
+        actionsEl.appendChild(createActionButton('Delete', 'btn-inline btn-danger', async function () {
+          await doDeleteLecture(id, popup);
+        }));
       }
 
-      // position popup above event element or near calendar popover
-      popup.style.display = 'block';
-      popup.style.position = 'fixed';
-      popup.style.zIndex = 20000;
-      if (el) {
-        const r = el.getBoundingClientRect();
-        const top = r.top - popup.offsetHeight - 8;
-        const left = r.left + (r.width - popup.offsetWidth) / 2;
-        popup.style.top = `${Math.max(8, top)}px`;
-        popup.style.left = `${Math.max(8, left)}px`;
-      } else {
-        // fallback: position near calendar popover
-        const pop = document.getElementById('calendarPopover');
-        if (pop) {
-          const pr = pop.getBoundingClientRect();
-          const top = pr.top - popup.offsetHeight - 8;
-          const left = pr.left + (pr.width - popup.offsetWidth) / 2;
-          popup.style.top = `${Math.max(8, top)}px`;
-          popup.style.left = `${Math.max(8, left)}px`;
-        }
-      }
-    } catch (e) { console.error(e); }
+      positionLecturePopup(popup, eventEl);
+    } catch (error) {
+      console.error('[ProfessorHome] Calendar event click error:', error);
+    }
   };
 
+  // ============================================================================
+  // Lecture Status Change
+  // ============================================================================
+
+  /**
+   * Changes the status of a lecture via API.
+   * @param {string} lectureId - The lecture ID.
+   * @param {number} statusValue - The new status value.
+   * @param {HTMLElement} popupOrFeedback - The popup or feedback element.
+   * @param {HTMLElement|null} modalEl - Optional modal element.
+   */
   async function doStatusChange(lectureId, statusValue, popupOrFeedback, modalEl) {
-    if (!lectureId) return;
-    // popupOrFeedback may be the popup element (lecturePopup) or a feedback element inside a modal
-    const popup = (popupOrFeedback && popupOrFeedback.id === 'lecturePopup') ? popupOrFeedback : null;
-    const feedbackEl = popup ? (popup.querySelector('.lp-actions') || popup) : popupOrFeedback;
+    if (!lectureId) {
+      return;
+    }
+
+    const popup = (popupOrFeedback?.id === 'lecturePopup')
+      ? popupOrFeedback
+      : null;
+
+    const feedbackEl = popup
+      ? (popup.querySelector('.lp-actions') || popup)
+      : popupOrFeedback;
 
     try {
-      const resp = await fetch(`/api/lectures/status/${lectureId}`, {
+      const response = await fetch(`/api/lectures/status/${lectureId}`, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: statusValue })
       });
 
-      if (!resp.ok) {
-        let txt = `Error ${resp.status}`;
-        try { const j = await resp.json(); if (j && j.detail) txt = j.detail; } catch (e) { try { txt = await resp.text(); } catch {} }
-        try { if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') feedbackEl.textContent = txt; }
-        catch (e) { /* ignore */ }
+      if (!response.ok) {
+        let errorText = `Error ${response.status}`;
+
+        try {
+          const json = await response.json();
+          if (json && json.detail) {
+            errorText = json.detail;
+          }
+        } catch {
+          try {
+            errorText = await response.text();
+          } catch {
+            // Use default error
+          }
+        }
+
+        try {
+          if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') {
+            feedbackEl.textContent = errorText;
+          }
+        } catch {
+          // Ignore feedback update errors
+        }
         return;
       }
 
-      // success: update local status map
+      // Success: update local status map
       let updated = null;
-      try { updated = await resp.json(); } catch (e) { /* ok - endpoint may return no content */ }
-      const newStatus = updated?.status ?? updated?.Status ?? statusValue;
-      window._lectureStatusMap[lectureId] = newStatus;
+      try {
+        updated = await response.json();
+      } catch {
+        // Endpoint may return no content
+      }
 
-      // update any already-rendered status pill in the calendar
+      const newStatus = updated?.status ?? updated?.Status ?? statusValue;
+      globalThis._lectureStatusMap[lectureId] = newStatus;
+
+      // Update any already-rendered status pill in the calendar
       updateRenderedCalendarStatusPill(lectureId, newStatus);
 
-      // keep active lecture cards in sync
+      // Keep active lecture cards in sync
       try {
-        // prefer cached lecture name/description if endpoint doesn't return them
         const meta = lectureMetaById.get(String(lectureId));
+
         if (isActiveLectureStatus(newStatus)) {
           upsertActiveLectureCard({
             id: lectureId,
@@ -986,20 +1782,183 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
           removeActiveLectureCard(lectureId);
         }
-      } catch (e) { /* ignore */ }
+      } catch {
+        // Ignore card sync errors
+      }
 
-      // hide popup or modal depending on caller
+      // Hide popup or modal
       if (modalEl) {
         try {
           const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
           bsModal.hide();
-        } catch (e) { /* ignore */ }
+        } catch {
+          // Ignore modal hide errors
+        }
       } else if (popup) {
-        try { popup.style.display = 'none'; } catch (e) { /* ignore */ }
+        try {
+          popup.style.display = 'none';
+        } catch {
+          // Ignore popup hide errors
+        }
       }
-    } catch (e) {
-      console.error(e);
-      try { if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') feedbackEl.textContent = 'Network error'; } catch (e) { /* ignore */ }
+    } catch (error) {
+      console.error('[ProfessorHome] Status change error:', error);
+
+      try {
+        if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') {
+          feedbackEl.textContent = 'Network error';
+        }
+      } catch {
+        // Ignore feedback update errors
+      }
     }
   }
+
+  // ============================================================================
+  // Lecture Deletion
+  // ============================================================================
+
+  /**
+   * Deletes a lecture via API.
+   * @param {string} lectureId - The lecture ID.
+   * @param {HTMLElement} popupOrFeedback - The popup or feedback element.
+   */
+  async function doDeleteLecture(lectureId, popupOrFeedback) {
+    if (!lectureId) {
+      return;
+    }
+
+    const popup = (popupOrFeedback?.id === 'lecturePopup')
+      ? popupOrFeedback
+      : null;
+
+    const feedbackEl = popup
+      ? (popup.querySelector('.lp-actions') || popup)
+      : popupOrFeedback;
+
+    try {
+      const response = await fetch(`/api/lectures/${lectureId}`, {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+
+      if (!response.ok) {
+        let errorText = `Error ${response.status}`;
+
+        try {
+          const json = await response.json();
+          if (json && json.detail) {
+            errorText = json.detail;
+          }
+        } catch {
+          try {
+            errorText = await response.text();
+          } catch {
+            // Use default error
+          }
+        }
+
+        try {
+          if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') {
+            feedbackEl.textContent = errorText;
+          }
+        } catch {
+          // Ignore feedback update errors
+        }
+        return;
+      }
+
+      // Success: remove lecture from local state
+      delete globalThis._lectureStatusMap[lectureId];
+
+      // Remove from calendar events
+      try {
+        if (globalThis.AttendanceCalendar) {
+          const eventsHost = document.querySelector('[data-cal-events]');
+          if (eventsHost) {
+            const evBlock = eventsHost.querySelector(`[data-event-id="${lectureId}"]`);
+            if (evBlock) {
+              evBlock.remove();
+            }
+          }
+        }
+      } catch {
+        // Ignore calendar removal errors
+      }
+
+      // Remove active lecture card if present
+      try {
+        removeActiveLectureCard(lectureId);
+      } catch {
+        // Ignore card removal errors
+      }
+
+      // Remove from cached meta
+      try {
+        lectureMetaById.delete(String(lectureId));
+      } catch {
+        // Ignore meta removal errors
+      }
+
+      // Hide popup
+      if (popup) {
+        try {
+          popup.style.display = 'none';
+        } catch {
+          // Ignore popup hide errors
+        }
+      }
+    } catch (error) {
+      console.error('[ProfessorHome] Delete lecture error:', error);
+
+      try {
+        if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') {
+          feedbackEl.textContent = 'Network error';
+        }
+      } catch {
+        // Ignore feedback update errors
+      }
+    }
+  }
+
+  // ============================================================================
+  // Event Listeners
+  // ============================================================================
+
+  /**
+   * Initializes modal event listeners.
+   */
+  function initModalEventListeners() {
+    // Wire open button
+    if (openBtn) {
+      openBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        openModal();
+      });
+    }
+
+    // Wire close buttons (backdrop and close button)
+    modalEl.querySelectorAll('[data-close-modal]').forEach(function (el) {
+      el.addEventListener('click', function (event) {
+        event.preventDefault();
+        closeModal();
+      });
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && modalEl.classList.contains('open')) {
+        closeModal();
+      }
+    });
+
+    // Form submission
+    form.addEventListener('submit', handleFormSubmit);
+  }
+
+  // ============================================================================
+  // Initialization
+  // ============================================================================
+
+  initModalEventListeners();
 });

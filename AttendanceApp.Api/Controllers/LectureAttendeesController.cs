@@ -18,10 +18,11 @@ public sealed class LectureAttendeesController(IMediator mediator) : ControllerB
         [FromRoute] Guid lectureId,
         [FromQuery] int page = 0,
         [FromQuery] int pageSize = 20,
+        [FromQuery] string? searchFilter = null,
         CancellationToken cancellationToken = default)
     {
         var userId = User.GetUserId();
-        var query = new GetLectureAttendeesQuery(userId, lectureId, page, pageSize);
+        var query = new GetLectureAttendeesQuery(userId, lectureId, page, pageSize, searchFilter);
         var result = await mediator.Send(query, cancellationToken);
         return this.ToActionResult(result);
     }

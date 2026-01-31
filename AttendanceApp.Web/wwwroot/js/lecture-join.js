@@ -1,116 +1,361 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const root = document.querySelector('.join-page');
-  if (!root) return;
+/**
+ * @fileoverview Lecture join page functionality.
+ * Handles the automatic joining of a lecture when the page loads.
+ */
 
-  const lectureId = root.getAttribute('data-lecture-id');
-  const statusText = document.getElementById('joinStatusText');
-  const resultEl = document.getElementById('joinResult');
-  const a11yStatus = document.getElementById('joinA11yStatus');
-  const a11yProgress = document.getElementById('joinProgressA11y');
-  const spinner = root.querySelector('.join-spinner');
-  const progressBar = root.querySelector('.join-progress .progress-bar');
+'use strict';
 
-  function setResult(message, kind) {
-    if (resultEl) {
-      resultEl.textContent = message || '';
-      resultEl.classList.remove('ok', 'err');
-      if (kind === 'ok') resultEl.classList.add('ok');
-      if (kind === 'err') resultEl.classList.add('err');
+(function () {
+  // ============================================================================
+  // Constants
+  // ============================================================================
+
+  /** Regular expression pattern for validating GUID format */
+  const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  /** Delay before redirecting to home after successful join (in milliseconds) */
+  const REDIRECT_DELAY_MS = 3000;
+
+  /** Home page URL for redirect after successful join */
+  const HOME_URL = '/home/index';
+
+  /** Result types for UI state */
+  const ResultType = Object.freeze({
+    OK: 'ok',
+    ERROR: 'err'
+  });
+
+  /** Status messages */
+  const Messages = Object.freeze({
+    MISSING_ID: 'Missing lecture id.',
+    INVALID_ID: 'Invalid lecture id.',
+    ID_NOT_VALID: 'Id is not valid.',
+    JOINING: 'Joining…',
+    FAILED: 'Failed.',
+    DONE: 'Done.',
+    JOINED: 'Joined',
+    NETWORK_ERROR: 'Network error while joining.',
+    SUCCESS: 'You joined the lecture.'
+  });
+
+  // ============================================================================
+  // DOM Elements
+  // ============================================================================
+
+  /**
+   * Retrieves all required DOM elements for the join page.
+   * @returns {Object|null} Object containing DOM elements, or null if root not found.
+   */
+  function getDomElements() {
+    const root = document.querySelector('.join-page');
+    if (!root) {
+      return null;
+    }
+
+    return {
+      root,
+      lectureId: root.getAttribute('data-lecture-id'),
+      isLectureIdValid: root.getAttribute('data-lecture-id-valid') === 'true',
+      statusText: document.getElementById('joinStatusText'),
+      resultEl: document.getElementById('joinResult'),
+      actionsEl: document.getElementById('joinActions'),
+      a11yStatus: document.getElementById('joinA11yStatus'),
+      a11yProgress: document.getElementById('joinProgressA11y'),
+      spinner: root.querySelector('.join-spinner'),
+      progressBar: root.querySelector('.join-progress .progress-bar')
+    };
+  }
+
+  // ============================================================================
+  // Utility Functions
+  // ============================================================================
+
+  /**
+   * Validates if a string is a valid GUID format.
+   * @param {string} value - The value to validate.
+   * @returns {boolean} True if valid GUID format, false otherwise.
+   */
+  function isValidGuid(value) {
+    return Boolean(value) && GUID_PATTERN.test(value);
+  }
+
+  /**
+   * Safely sets a value on an element property.
+   * @param {HTMLElement|null} element - The target element.
+   * @param {string} property - The property name to set.
+   * @param {*} value - The value to assign.
+   */
+  function safeSetProperty(element, property, value) {
+    if (element) {
+      try {
+        element[property] = value;
+      } catch {
+        // Element may not support the property
+      }
     }
   }
 
-  function stopLoading() {
-    try { if (spinner) spinner.style.display = 'none'; } catch (e) { /* ignore */ }
-    try {
-      if (progressBar) {
-        progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-      }
-    } catch (e) { /* ignore */ }
-    try { if (a11yProgress) a11yProgress.value = 100; } catch (e) { /* ignore */ }
-  }
-
+  /**
+   * Extracts a user-friendly error message from API response data.
+   * @param {Object|string|null} data - The response data.
+   * @param {string} fallback - Fallback message if extraction fails.
+   * @returns {string} The extracted or fallback error message.
+   */
   function extractErrorMessage(data, fallback) {
-    if (!data) return fallback;
-    if (typeof data === 'string') return data;
+    if (!data) {
+      return fallback;
+    }
+
+    if (typeof data === 'string') {
+      return data;
+    }
+
     if (data.detail) {
-      const m = String(data.detail).match(/--\s*(.*?)\s*Severity:/is);
-      if (m && m[1]) return m[1].trim();
+      // Try to extract message between '--' and 'Severity:' for validation errors
+      const match = String(data.detail).match(/--\s*(.*?)\s*Severity:/is);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
       return String(data.detail).trim();
     }
-    if (data.title) return String(data.title);
-    if (data.message) return String(data.message);
-    if (data.errors) return JSON.stringify(data.errors);
+
+    if (data.title) {
+      return String(data.title);
+    }
+
+    if (data.message) {
+      return String(data.message);
+    }
+
+    if (data.errors) {
+      return JSON.stringify(data.errors);
+    }
+
     return fallback;
   }
 
-  async function tryJoin(url) {
-    const resp = await fetch(url, {
+  // ============================================================================
+  // UI Update Functions
+  // ============================================================================
+
+  /**
+   * Creates UI update functions bound to the DOM elements.
+   * @param {Object} elements - The DOM elements object.
+   * @returns {Object} Object containing UI update functions.
+   */
+  function createUiUpdater(elements) {
+    const { resultEl, actionsEl, spinner, progressBar, a11yProgress, statusText, a11yStatus } = elements;
+
+    return {
+      /**
+       * Updates the result display with a message and visual state.
+       * @param {string} message - The message to display.
+       * @param {string|null} kind - The result type ('ok', 'err', or null).
+       */
+      setResult(message, kind) {
+        if (resultEl) {
+          resultEl.textContent = message || '';
+          resultEl.classList.remove(ResultType.OK, ResultType.ERROR);
+
+          if (kind === ResultType.OK) {
+            resultEl.classList.add(ResultType.OK);
+          } else if (kind === ResultType.ERROR) {
+            resultEl.classList.add(ResultType.ERROR);
+          }
+        }
+
+        if (actionsEl) {
+          actionsEl.hidden = kind !== ResultType.ERROR;
+        }
+      },
+
+      /**
+       * Stops all loading indicators.
+       */
+      stopLoading() {
+        if (spinner) {
+          spinner.style.display = 'none';
+        }
+
+        if (progressBar) {
+          progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+        }
+
+        safeSetProperty(a11yProgress, 'value', 100);
+      },
+
+      /**
+       * Updates the status text display.
+       * @param {string} text - The status text to display.
+       */
+      setStatusText(text) {
+        if (statusText) {
+          statusText.textContent = text;
+        }
+        safeSetProperty(a11yStatus, 'value', text);
+      },
+
+      /**
+       * Updates the accessibility progress value.
+       * @param {number} value - The progress value (0-100).
+       */
+      setProgress(value) {
+        safeSetProperty(a11yProgress, 'value', value);
+      }
+    };
+  }
+
+  // ============================================================================
+  // API Functions
+  // ============================================================================
+
+  /**
+   * Attempts to join a lecture via the API.
+   * @param {string} url - The API endpoint URL.
+   * @returns {Promise<Response>} The fetch response.
+   */
+  async function postJoinRequest(url) {
+    return fetch(url, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Accept': 'application/json' }
     });
-    return resp;
   }
 
-  (async () => {
-    if (!lectureId) {
-      stopLoading();
-      if (statusText) statusText.textContent = 'Missing lecture id.';
-      try { if (a11yStatus) a11yStatus.value = 'Missing lecture id.'; } catch (e) { /* ignore */ }
-      setResult('Invalid lecture id.', 'err');
-      return;
-    }
+  /**
+   * Builds the API endpoint URLs for joining a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {Object} Object containing primary and fallback URLs.
+   */
+  function buildJoinUrls(lectureId) {
+    const encodedId = encodeURIComponent(lectureId);
+    return {
+      primary: `/api/lectures/join/${encodedId}`,
+      fallback: `/api/lecture/join/${encodedId}`
+    };
+  }
 
-    if (statusText) statusText.textContent = 'Joining…';
-    try { if (a11yStatus) a11yStatus.value = 'Joining'; } catch (e) { /* ignore */ }
-    setResult('', null);
+  // ============================================================================
+  // Main Join Logic
+  // ============================================================================
 
-    try { if (a11yProgress) a11yProgress.value = 10; } catch (e) { /* ignore */ }
+  /**
+   * Handles the join process failure.
+   * @param {Object} ui - The UI updater object.
+   * @param {string} message - The error message to display.
+   */
+  function handleJoinFailure(ui, message) {
+    ui.stopLoading();
+    ui.setStatusText(Messages.FAILED);
+    ui.setResult(message, ResultType.ERROR);
+  }
 
-    const primary = `/api/lectures/join/${encodeURIComponent(lectureId)}`;
-    const secondary = `/api/lecture/join/${encodeURIComponent(lectureId)}`;
+  /**
+   * Handles successful join.
+   * @param {Object} ui - The UI updater object.
+   */
+  function handleJoinSuccess(ui) {
+    ui.stopLoading();
+    ui.setStatusText(Messages.DONE);
+    ui.setResult(Messages.SUCCESS, ResultType.OK);
 
-    let resp;
+    setTimeout(function () {
+      window.location.href = HOME_URL;
+    }, REDIRECT_DELAY_MS);
+  }
+
+  /**
+   * Attempts to parse error message from response.
+   * @param {Response} resp - The fetch response.
+   * @returns {Promise<string>} The extracted error message.
+   */
+  async function parseErrorFromResponse(resp) {
+    const defaultMessage = `Error ${resp.status}`;
+
     try {
-      resp = await tryJoin(primary);
-      if (resp.status === 404) {
-        resp = await tryJoin(secondary);
-      }
-    } catch (e) {
-      stopLoading();
-      if (statusText) statusText.textContent = 'Failed.';
-      try { if (a11yStatus) a11yStatus.value = 'Failed'; } catch (e) { /* ignore */ }
-      setResult('Network error while joining.', 'err');
-      return;
-    }
-
-    if (!resp.ok) {
-      stopLoading();
-      if (statusText) statusText.textContent = 'Failed.';
-      try { if (a11yStatus) a11yStatus.value = 'Failed'; } catch (e) { /* ignore */ }
-
-      let message = `Error ${resp.status}`;
+      const data = await resp.json();
+      return extractErrorMessage(data, defaultMessage);
+    } catch {
       try {
-        const data = await resp.json();
-        message = extractErrorMessage(data, message);
-      } catch (e) {
-        try {
-          const txt = await resp.text();
-          if (txt) message = txt;
-        } catch (e2) { /* ignore */ }
+        const text = await resp.text();
+        return text || defaultMessage;
+      } catch {
+        return defaultMessage;
       }
+    }
+  }
 
-      setResult(message, 'err');
+  /**
+   * Executes the join process.
+   * @param {Object} elements - The DOM elements object.
+   */
+  async function executeJoin(elements) {
+    const ui = createUiUpdater(elements);
+    const { lectureId, isLectureIdValid } = elements;
+
+    // Validate lecture ID presence
+    if (!lectureId) {
+      handleJoinFailure(ui, Messages.INVALID_ID);
+      ui.setStatusText(Messages.MISSING_ID);
       return;
     }
 
-    stopLoading();
-    if (statusText) statusText.textContent = 'Done.';
-    try { if (a11yStatus) a11yStatus.value = 'Joined'; } catch (e) { /* ignore */ }
-    setResult('You joined the lecture.', 'ok');
+    // Validate lecture ID format
+    if (!isLectureIdValid || !isValidGuid(lectureId)) {
+      handleJoinFailure(ui, Messages.ID_NOT_VALID);
+      return;
+    }
 
-    setTimeout(() => {
-      window.location.href = '/home/index';
-    }, 3000);
-  })();
-});
+    // Start join process
+    ui.setStatusText(Messages.JOINING);
+    ui.setResult('', null);
+    ui.setProgress(10);
+
+    // Build API URLs
+    const urls = buildJoinUrls(lectureId);
+
+    // Attempt to join
+    let response;
+    try {
+      response = await postJoinRequest(urls.primary);
+
+      // Try fallback URL if primary returns 404
+      if (response.status === 404) {
+        response = await postJoinRequest(urls.fallback);
+      }
+    } catch {
+      handleJoinFailure(ui, Messages.NETWORK_ERROR);
+      return;
+    }
+
+    // Handle non-success response
+    if (!response.ok) {
+      const errorMessage = await parseErrorFromResponse(response);
+      handleJoinFailure(ui, errorMessage);
+      return;
+    }
+
+    // Success
+    handleJoinSuccess(ui);
+  }
+
+  // ============================================================================
+  // Initialization
+  // ============================================================================
+
+  /**
+   * Initializes the lecture join page.
+   */
+  function init() {
+    const elements = getDomElements();
+
+    if (!elements) {
+      return;
+    }
+
+    executeJoin(elements);
+  }
+
+  // Start when DOM is ready
+  document.addEventListener('DOMContentLoaded', init);
+})();

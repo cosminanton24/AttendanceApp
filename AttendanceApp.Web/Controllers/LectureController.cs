@@ -6,11 +6,15 @@ namespace AttendanceApp.Web.Controllers;
 [Route("lecture")]
 public class LectureController : Controller
 {
-    [HttpGet("join/{Id:guid}")]
+    [HttpGet("join/{id?}")]
     [Authorize]
-    public IActionResult Join([FromRoute] Guid Id)
+    public IActionResult Join([FromRoute] string? id)
     {
-        ViewData["LectureId"] = Id;
+        id ??= string.Empty;
+
+        var isValid = Guid.TryParse(id, out _);
+        ViewData["LectureId"] = id;
+        ViewData["IsLectureIdValid"] = isValid;
         return View();
     }
 }

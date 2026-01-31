@@ -1,7 +1,7 @@
 @* Professor-specific home partial with a Create Lecture modal *@
 <div class="professor-home">
   <h3>Professor Dashboard</h3>
-  <button class="btn-inline mb-3" data-bs-toggle="modal" data-bs-target="#makeLectureModal">Make Lecture</button>
+  <button class="btn-inline mb-3" id="openMakeLectureBtn">Make Lecture</button>
 </div>
 
 <div class="professor-active-lectures">
@@ -9,51 +9,50 @@
   <div id="professorActiveLectures" class="professor-lectures-grid" aria-live="polite"></div>
 </div>
 
-<!-- Create Lecture Modal -->
-<div class="modal fade" id="makeLectureModal" tabindex="-1" aria-labelledby="makeLectureModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form id="makeLectureForm" onsubmit="event.preventDefault();">
-        <div class="modal-header">
-          <h5 class="modal-title" id="makeLectureModalLabel">Create Lecture</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Create Lecture Modal (custom, not Bootstrap) -->
+<div class="make-lecture-modal" id="makeLectureModal" aria-hidden="true">
+  <div class="make-lecture-modal-backdrop" data-close-modal></div>
+  <div class="make-lecture-modal-content">
+    <form id="makeLectureForm" onsubmit="event.preventDefault();">
+      <div class="make-lecture-modal-header">
+        <h2 class="make-lecture-modal-title">Create Lecture</h2>
+        <button type="button" class="make-lecture-modal-close" data-close-modal aria-label="Close">✕</button>
+      </div>
+      <div class="make-lecture-modal-body">
+        <div class="ml-field">
+          <label class="ml-label" for="makeLectureTitle">Title</label>
+          <input class="ml-input" id="makeLectureTitle" name="title" required />
         </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label" for="makeLectureTitle">Title</label>
-            <input class="form-control" id="makeLectureTitle" name="title" required />
-          </div>
 
-          <div class="mb-3">
-            <label class="form-label" for="makeLectureDate">Date</label>
-            <input type="date" class="form-control" id="makeLectureDate" name="date" required />
-          </div>
+        <div class="ml-field">
+          <label class="ml-label" for="makeLectureDate">Date</label>
+          <input type="date" class="ml-input" id="makeLectureDate" name="date" required />
+        </div>
 
-          <div class="row">
-            <div class="col mb-3">
-              <label class="form-label" for="makeLectureStart">Start</label>
-              <input type="time" class="form-control" id="makeLectureStart" name="start" required />
-            </div>
-            <div class="col mb-3">
-              <label class="form-label" for="makeLectureDuration">Duration</label>
-              <input type="text" class="form-control" id="makeLectureDuration" name="duration" placeholder="e.g. 90m | 1h30m | PT1H30M | 01:30" required />
-            </div>
+        <div class="ml-row">
+          <div class="ml-field">
+            <label class="ml-label" for="makeLectureStart">Start</label>
+            <input type="time" class="ml-input" id="makeLectureStart" name="start" required />
           </div>
-
-          <div class="mb-3">
-            <label class="form-label" for="makeLectureDescription">Description</label>
-            <textarea class="form-control" id="makeLectureDescription" name="description" rows="3" required></textarea>
+          <div class="ml-field">
+            <label class="ml-label" for="makeLectureDuration">Duration</label>
+            <input type="text" class="ml-input" id="makeLectureDuration" name="duration" placeholder="e.g. 90m | 1h30m" required />
           </div>
         </div>
-        <div class="modal-footer">
-          <div id="makeLectureFeedback" class="form-feedback" aria-live="polite"></div>
-          <div class="modal-actions">
-            <button type="button" class="btn-inline" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn-inline">Create</button>
-          </div>
+
+        <div class="ml-field">
+          <label class="ml-label" for="makeLectureDescription">Description</label>
+          <textarea class="ml-input ml-textarea" id="makeLectureDescription" name="description" rows="3" required></textarea>
         </div>
-      </form>
-    </div>
+      </div>
+      <div class="make-lecture-modal-footer">
+        <div id="makeLectureFeedback" class="ml-feedback" aria-live="polite"></div>
+        <div class="ml-actions">
+          <button type="button" class="ml-btn ml-btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="ml-btn ml-btn-primary">Create</button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 

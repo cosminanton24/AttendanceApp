@@ -1,0 +1,86 @@
+@using AttendanceApp.Domain.Enums
+@model AttendanceApp.Web.Models.ProfileViewModel
+@{
+    ViewData["Title"] = "My Profile";
+    Layout = "_ProfileLayout";
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
+}
+
+<div class="profile-page">
+    <!-- Header / Navigation -->
+    <nav class="profile-nav">
+        <a href="/home/index" class="back-btn" aria-label="Back">
+            <span class="back-icon">←</span>
+        </a>
+        <span class="nav-title">My Profile</span>
+        <div class="nav-spacer"></div>
+    </nav>
+
+    <!-- Profile Card -->
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="profile-avatar">
+                @{
+                    var parts = Model.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var initials = parts.Length >= 2 
+                        ? $"{parts[0][0]}{parts[^1][0]}" 
+                        : Model.Name.Length > 0 ? Model.Name[0].ToString() : "?";
+                }
+                <span>@initials.ToUpper()</span>
+            </div>
+            <div class="profile-info">
+                <h1 class="profile-name">@Model.Name</h1>
+                <p class="profile-email">@Model.Email</p>
+                <span class="profile-badge @(Model.UserType == UserType.Professor ? "badge-professor" : Model.UserType == UserType.Admin ? "badge-admin" : "badge-student")">
+                    @Model.UserType.ToString()
+                </span>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="profile-stats">
+            <button class="stat-item" id="followersBtn" data-user-id="@Model.UserId">
+                <span class="stat-count">@Model.FollowersCount</span>
+                <span class="stat-label">Followers</span>
+            </button>
+            <div class="stat-divider"></div>
+            <button class="stat-item" id="followingBtn" data-user-id="@Model.UserId">
+                <span class="stat-count">@Model.FollowingCount</span>
+                <span class="stat-label">Following</span>
+            </button>
+        </div>
+
+        <!-- Logout -->
+        <div class="profile-actions">
+            <button id="logoutBtn" class="logout-btn">
+                Log Out
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Followers/Following Modal -->
+<div class="users-modal" id="usersModal" aria-hidden="true">
+    <div class="users-modal-backdrop" data-close-modal></div>
+    <div class="users-modal-content">
+        <div class="users-modal-header">
+            <h2 class="users-modal-title" id="usersModalTitle">Followers</h2>
+            <button class="users-modal-close" data-close-modal aria-label="Close">✕</button>
+        </div>
+        <div class="users-modal-body" id="usersModalBody">
+            <!-- Users list will be rendered here -->
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        window.profileData = {
+            userId: "@Model.UserId",
+            isOwnProfile: true
+        };
+    </script>
+    <script src="~/js/profile.js" asp-append-version="true"></script>
+}

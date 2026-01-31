@@ -3,6 +3,7 @@ using AttendanceApp.Api.Common.Requests.Users;
 using AttendanceApp.Application.Common.Jwt;
 using AttendanceApp.Application.Features.Users.GetFollowState;
 using AttendanceApp.Application.Features.Users.GetUserInfoBatch;
+using AttendanceApp.Application.Features.Users.SearchUsersByName;
 using AttendanceApp.Application.Features.Users.ToggleFollowUser;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -66,6 +67,19 @@ public class UserController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetUserInfo([FromQuery] Guid[] ids, CancellationToken cancellationToken)
     {
         var query = new GetUserInfoBatchQuery(ids);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchUsersByName(
+        [FromQuery] string name,
+        [FromQuery] int page = 0,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new SearchUsersByNameQuery(name, page, pageSize);
         var result = await mediator.Send(query, cancellationToken);
         return this.ToActionResult(result);
     }

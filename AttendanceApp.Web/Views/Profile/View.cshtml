@@ -1,0 +1,134 @@
+@using AttendanceApp.Domain.Enums
+@model AttendanceApp.Web.Models.ProfileViewModel
+@{
+    ViewData["Title"] = Model.Name + " - Profile";
+    Layout = "_ProfileLayout";
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
+}
+
+<div class="profile-page">
+    <!-- Header / Navigation -->
+    <nav class="profile-nav">
+        <a href="/home/index" class="back-btn" aria-label="Back">
+            <span class="back-icon">←</span>
+        </a>
+        <span class="nav-title">Profile</span>
+        <div class="nav-spacer"></div>
+    </nav>
+
+    <!-- Profile Card -->
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="profile-avatar">
+                @{
+                    var parts = Model.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var initials = parts.Length >= 2 
+                        ? $"{parts[0][0]}{parts[^1][0]}" 
+                        : Model.Name.Length > 0 ? Model.Name[0].ToString() : "?";
+                }
+                <span>@initials.ToUpper()</span>
+            </div>
+            <div class="profile-info">
+                <h1 class="profile-name">@Model.Name</h1>
+                <p class="profile-email">@Model.Email</p>
+                <span class="profile-badge @(Model.UserType == UserType.Professor ? "badge-professor" : Model.UserType == UserType.Admin ? "badge-admin" : "badge-student")">
+                    @Model.UserType.ToString()
+                </span>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="profile-stats">
+            <button class="stat-item" id="followersBtn" data-user-id="@Model.UserId">
+                <span class="stat-count">@Model.FollowersCount</span>
+                <span class="stat-label">Followers</span>
+            </button>
+            <div class="stat-divider"></div>
+            <button class="stat-item" id="followingBtn" data-user-id="@Model.UserId">
+                <span class="stat-count">@Model.FollowingCount</span>
+                <span class="stat-label">Following</span>
+            </button>
+        </div>
+
+        <!-- Actions -->
+        @if (!Model.IsOwnProfile)
+        {
+            <div class="profile-actions">
+                <button id="followToggleBtn" 
+                        class="follow-btn @(Model.IsFollowing ? "following" : "")" 
+                        data-user-id="@Model.UserId"
+                        data-is-following="@Model.IsFollowing.ToString().ToLower()">
+                    @(Model.IsFollowing ? "Following" : "Follow")
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (Model.UserType == UserType.Professor)
+    {
+        <!-- Professor Calendar -->
+        <div class="profile-calendar" id="profileCalendar">
+            <div class="profile-cal-head">
+                <div class="profile-cal-title">
+                    <button type="button" class="cal-nav" data-cal-prev aria-label="Previous month">‹</button>
+                    <span data-cal-month></span>
+                    <button type="button" class="cal-nav" data-cal-next aria-label="Next month">›</button>
+                </div>
+                <div class="profile-cal-actions">
+                    <button type="button" class="cal-today" data-cal-today>Today</button>
+                </div>
+            </div>
+
+            <div class="profile-cal-body">
+                <!-- Month -->
+                <div class="cal-month">
+                    <div class="cal-dow">
+                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                    </div>
+                    <div class="cal-grid" data-cal-grid></div>
+                </div>
+                <!-- Day timeline -->
+                <div class="cal-day">
+                    <div class="cal-day-head">
+                        <span data-cal-daylabel></span>
+                    </div>
+                    <div class="cal-timeline">
+                        <div class="cal-hours" data-cal-hours></div>
+                        <div class="cal-events" data-cal-events></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Followers/Following Modal -->
+<div class="users-modal" id="usersModal" aria-hidden="true">
+    <div class="users-modal-backdrop" data-close-modal></div>
+    <div class="users-modal-content">
+        <div class="users-modal-header">
+            <h2 class="users-modal-title" id="usersModalTitle">Followers</h2>
+            <button class="users-modal-close" data-close-modal aria-label="Close">✕</button>
+        </div>
+        <div class="users-modal-body" id="usersModalBody">
+            <!-- Users list will be rendered here -->
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        window.profileData = {
+            userId: "@Model.UserId",
+            isOwnProfile: @Model.IsOwnProfile.ToString().ToLower(),
+            isProfessor: @(Model.UserType == UserType.Professor ? "true" : "false")
+        };
+    </script>
+    <script src="~/js/profile.js" asp-append-version="true"></script>
+    @if (Model.UserType == UserType.Professor)
+    {
+        <script src="~/js/profile-calendar.js" asp-append-version="true"></script>
+    }
+}

@@ -8,5 +8,6 @@ public sealed record GetLectureAttendeesQuery(
     Guid RequesterId,
     Guid LectureId,
     int Page,
-    int PageSize
+    int PageSize,
+    string? SearchFilter = null
 ) : IRequest<Result<LectureAttendeesPageDto>>;

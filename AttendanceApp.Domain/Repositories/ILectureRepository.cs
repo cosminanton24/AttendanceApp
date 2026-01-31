@@ -19,4 +19,8 @@ public interface ILectureRepository : IRepository<Lecture>
         DateTime? fromDate = null,
         LectureStatus? status = null,
         CancellationToken cancellationToken = default);
+
+        
+        
+    Task<bool> HasProfessorConflictingLectureAsync(Guid professorId, DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default);
 }
