@@ -6,6 +6,7 @@ public class PrivacyModel : PageModel
 {
     public void OnGet()
     {
+        throw new NotSupportedException();
     }
 }
 
