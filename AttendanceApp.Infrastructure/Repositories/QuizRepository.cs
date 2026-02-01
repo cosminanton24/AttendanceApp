@@ -70,7 +70,7 @@ public class QuizRepository(AttendanceAppDbContext db) : GenericRepository<Quiz>
 
     public async Task AddQuestionToQuizAsync(Guid quizId, QuizQuestion question, CancellationToken cancellationToken = default)
     {
-        var quiz = await _dbSet
+        _ = await _dbSet
             .Include(q => q.Questions)
             .FirstOrDefaultAsync(q => q.Id == quizId, cancellationToken)
             ?? throw new KeyNotFoundException($"Quiz {quizId} not found.");

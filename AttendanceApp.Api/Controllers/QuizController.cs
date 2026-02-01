@@ -1,3 +1,4 @@
+using System.Globalization;
 using AttendanceApp.Api.Common;
 using AttendanceApp.Api.Common.Requests.Quizzes;
 using AttendanceApp.Application.Common.Jwt;
@@ -103,7 +104,7 @@ public class QuizController(IMediator mediator) : ControllerBase
     {
         var userId = User.GetUserId();
         TimeSpan? duration = null;
-        if (!string.IsNullOrWhiteSpace(request.Duration) && TimeSpan.TryParse(request.Duration, out var parsedDuration))
+        if (!string.IsNullOrWhiteSpace(request.Duration) && TimeSpan.TryParse(request.Duration, CultureInfo.InvariantCulture, out var parsedDuration))
         {
             duration = parsedDuration;
         }

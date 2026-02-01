@@ -10,7 +10,7 @@ public class GetQuizzesByLectureQueryHandler(IQuizLectureRepository quizLectureR
 {
     public async Task<Result<IReadOnlyList<QuizLectureDto>>> Handle(GetQuizzesByLectureQuery query, CancellationToken cancellationToken)
     {
-        var lecture = await lectureRepo.GetByIdAsync(query.LectureId, cancellationToken)
+        _ = await lectureRepo.GetByIdAsync(query.LectureId, cancellationToken)
             ?? throw new KeyNotFoundException($"No lecture with id {query.LectureId} found.");
 
         var quizLectures = await quizLectureRepo.GetQuizLecturesByLectureIdAsync(query.LectureId, cancellationToken);

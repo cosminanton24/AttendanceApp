@@ -13,7 +13,7 @@ public class GetActiveQuizForLectureQueryHandler(
 {
     public async Task<Result<QuizDetailDto?>> Handle(GetActiveQuizForLectureQuery query, CancellationToken cancellationToken)
     {
-        var lecture = await lectureRepo.GetByIdAsync(query.LectureId, cancellationToken)
+        _ = await lectureRepo.GetByIdAsync(query.LectureId, cancellationToken)
             ?? throw new KeyNotFoundException($"No lecture with id {query.LectureId} found.");
 
         var now = DateTime.UtcNow;
