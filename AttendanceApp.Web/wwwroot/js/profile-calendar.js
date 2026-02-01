@@ -34,6 +34,9 @@
   /** Days in a week */
   const DAYS_IN_WEEK = 7;
 
+  /** Scroll offset to position current time nicely in view */
+  const SCROLL_OFFSET = 120;
+
   /** Lecture status mapping */
   const StatusConfig = Object.freeze({
     SCHEDULED: { value: 0, label: 'Scheduled', class: 'status-scheduled' },
@@ -531,6 +534,18 @@
     for (const event of dayEvents) {
       const eventEl = createEventElement(event, dayStart, dayEnd, ppm);
       elements.events.appendChild(eventEl);
+    }
+
+    // Auto-scroll to current time if viewing today
+    const today = new Date();
+    if (isSameDay(state.selected, today)) {
+      const minutesNow = today.getHours() * 60 + today.getMinutes();
+      const targetY = minutesNow * ppm;
+      const scroller = elements.events.parentElement;
+      // Use setTimeout to ensure layout is complete before scrolling
+      setTimeout(function() {
+        scroller.scrollTop = Math.max(0, targetY - SCROLL_OFFSET);
+      }, 0);
     }
 
     renderNowLine();

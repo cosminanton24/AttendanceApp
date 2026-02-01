@@ -17,10 +17,10 @@
         <div class="nav-spacer"></div>
     </nav>
 
-    <partial name="_ProfileCard" model="Model" />
+    @await Html.PartialAsync("_ProfileCard", Model)
 </div>
 
-<partial name="_UsersModal" />
+@await Html.PartialAsync("_UsersModal")
 
 @section Scripts {
     <script>

@@ -67,6 +67,10 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ILectureRepository, LectureRepository>();
 builder.Services.AddScoped<ILectureAttendeeRepository, LectureAttendeeRepository>();
 builder.Services.AddScoped<IUserFollowingsRepository, UserFollowingsRepository>();
+builder.Services.AddScoped<IQuizRepository, QuizRepository>();
+builder.Services.AddScoped<IQuizQuestionRepository, QuizQuestionRepository>();
+builder.Services.AddScoped<IQuizOptionRepository, QuizOptionRepository>();
+builder.Services.AddScoped<IQuizLectureRepository, QuizLectureRepository>();
 
 // Add JWT authentication
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "dev_only_jwt_key_at_least_32_chars_long!!";

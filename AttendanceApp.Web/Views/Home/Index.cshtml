@@ -13,6 +13,11 @@
     </div>
 
     <div class="nav-right">
+        <!-- Quizzes button (professors only) -->
+        @if (Model.UserType == UserType.Professor)
+        {
+            <button id="quizzesBtn" class="calendar-btn" aria-label="Quizzes" type="button">Quizzes</button>
+        }
         <!-- Calendar button -->
         <button id="calendarBtn" class="calendar-btn" aria-label="Calendar" type="button">Calendar</button>
         <!-- Search -->
@@ -59,6 +64,7 @@
         @await Html.PartialAsync("_ProfessorHome")
         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
         <script src="~/js/professor-home.js" asp-append-version="true"></script>
+        <script src="~/js/home-quizzes.js" asp-append-version="true"></script>
     }
     else if (Model.UserType == UserType.Admin)
     {
@@ -109,6 +115,95 @@
     </div>
   </div>
 </div>
+
+<!-- Quizzes popover (professors only) -->
+@if (Model.UserType == UserType.Professor)
+{
+<div id="quizzesPopover" class="quiz-popover" aria-hidden="true">
+  <div class="quiz-head">
+    <div class="quiz-title">
+      <span id="quizTitleText">My Quizzes</span>
+    </div>
+    <div class="quiz-head-actions">
+      <button type="button" class="quiz-action-btn" id="createQuizBtn" title="New Quiz">
+        <span class="plus-icon">+</span>
+        <span>New</span>
+      </button>
+      <button type="button" class="quiz-close" data-quiz-close aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="quiz-search">
+    <input type="text" 
+           class="quiz-search-input" 
+           id="quizSearchInput" 
+           placeholder="Search quizzes..." 
+           autocomplete="off" />
+  </div>
+  <div class="quiz-body">
+    <div class="quiz-list" id="quizList" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- Create Quiz Modal -->
+<div class="quiz-editor-modal" id="createQuizModal" aria-hidden="true">
+  <div class="quiz-editor-backdrop" data-close-create-modal></div>
+  <div class="quiz-editor-content">
+    <form id="createQuizForm" onsubmit="event.preventDefault();">
+      <div class="quiz-editor-header">
+        <h2 class="quiz-editor-title">Create Quiz</h2>
+        <button type="button" class="quiz-editor-close" data-close-create-modal aria-label="Close">✕</button>
+      </div>
+      <div class="quiz-editor-body">
+        <div class="qe-field">
+          <label class="qe-label" for="quizName">Quiz Name</label>
+          <input class="qe-input" id="quizName" name="name" required />
+        </div>
+        <div class="qe-field">
+          <label class="qe-label" for="quizDuration">Duration</label>
+          <input type="text" class="qe-input" id="quizDuration" name="duration" placeholder="e.g. 15m | 1h30m" required />
+        </div>
+      </div>
+      <div class="quiz-editor-footer">
+        <div id="createQuizFeedback" class="qe-feedback" aria-live="polite"></div>
+        <div class="qe-actions">
+          <button type="button" class="qe-btn qe-btn-secondary" data-close-create-modal>Cancel</button>
+          <button type="submit" class="qe-btn qe-btn-primary">Create</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Quiz Modal -->
+<div class="quiz-editor-modal" id="editQuizModal" aria-hidden="true">
+  <div class="quiz-editor-backdrop" data-close-edit-modal></div>
+  <div class="quiz-editor-content quiz-editor-content--large">
+    <div class="quiz-editor-header">
+      <div class="quiz-editor-title-wrap">
+        <input type="text" class="quiz-editor-name-input" id="editQuizName" placeholder="Quiz name..." />
+        <input type="text" class="quiz-editor-duration-input" id="editQuizDuration" placeholder="Duration (e.g. 15m)" />
+      </div>
+      <button type="button" class="quiz-editor-close" id="editQuizCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="quiz-editor-body quiz-editor-body--scroll" id="editQuizBody">
+      <!-- Questions rendered here -->
+    </div>
+    <div class="quiz-editor-warnings" id="editQuizWarnings">
+      <!-- Warnings rendered here -->
+    </div>
+    <div class="quiz-editor-footer">
+      <button type="button" class="qe-btn qe-btn-add" id="addQuestionBtn">
+        <span class="plus-icon">+</span>
+        <span>Add Question</span>
+      </button>
+      <div class="qe-actions">
+        <button type="button" class="qe-btn qe-btn-primary" id="editQuizDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+}
 
 <!-- Lecture action modal -->
 <div class="modal fade" id="lectureActionModal" tabindex="-1" aria-labelledby="lectureActionModalLabel" aria-hidden="true">

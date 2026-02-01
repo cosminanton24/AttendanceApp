@@ -18,15 +18,15 @@
         <div class="nav-spacer"></div>
     </nav>
 
-    <partial name="_ProfileCard" model="Model" />
+    @await Html.PartialAsync("_ProfileCard", Model)
 
     @if (Model.UserType == UserType.Professor)
     {
-        <partial name="_ProfessorCalendar" />
+        @await Html.PartialAsync("_ProfessorCalendar")
     }
 </div>
 
-<partial name="_UsersModal" />
+@await Html.PartialAsync("_UsersModal")
 
 @section Scripts {
     <script>

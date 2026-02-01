@@ -1,4 +1,5 @@
 using AttendanceApp.Domain.Lectures;
+using AttendanceApp.Domain.Quizzes;
 using AttendanceApp.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,10 @@ public class AttendanceAppDbContext : DbContext
     public DbSet<Lecture> Lectures { get; set; }
     public DbSet<LectureAttendee> LectureAttendees { get; set; }
     public DbSet<UserFollowing> UserFollowings { get; set; }
+    public DbSet<Quiz> Quizzes { get; set; }
+    public DbSet<QuizQuestion> QuizQuestions { get; set; }
+    public DbSet<QuizOption> QuizOptions { get; set; }
+    public DbSet<QuizLecture> QuizLectures { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
