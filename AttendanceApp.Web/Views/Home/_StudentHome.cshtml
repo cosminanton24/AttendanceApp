@@ -52,7 +52,8 @@
         <div id="studentLectureRemaining" class="student-lecture-progress__remaining"></div>
       </div>
 
-      <div id="studentLectureProgressTrack" class="student-lecture-progress__track" role="progressbar" aria-label="Lecture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <progress id="studentLectureProgress" class="visually-hidden" value="0" max="100" aria-label="Lecture progress"></progress>
+      <div id="studentLectureProgressTrack" class="student-lecture-progress__track">
         <div id="studentLectureProgressFill" class="student-lecture-progress__fill" aria-hidden="true"></div>
         <div id="studentLectureNowLine" class="student-lecture-progress__now" aria-hidden="true"></div>
       </div>

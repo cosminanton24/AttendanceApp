@@ -27,10 +27,20 @@
 
         <!-- Profile button -->
         @{
-            var parts = Model.UserName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var initials = parts.Length >= 2 
-                ? $"{parts[0][0]}{parts[^1][0]}" 
-                : Model.UserName.Length > 0 ? Model.UserName[0].ToString() : "?";
+          var parts = Model.UserName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+          string initials;
+          if (parts.Length >= 2)
+          {
+            initials = $"{parts[0][0]}{parts[^1][0]}";
+          }
+          else if (!string.IsNullOrEmpty(Model.UserName))
+          {
+            initials = Model.UserName[0].ToString();
+          }
+          else
+          {
+            initials = "?";
+          }
         }
         <a href="/profile/me" class="profile-btn" aria-label="Profile">
             <span class="profile-initials">@initials.ToUpper()</span>
@@ -47,7 +57,7 @@
     else if (Model.UserType == UserType.Professor)
     {
         @await Html.PartialAsync("_ProfessorHome")
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
         <script src="~/js/professor-home.js" asp-append-version="true"></script>
     }
     else if (Model.UserType == UserType.Admin)

@@ -62,6 +62,7 @@
     classDesc: document.getElementById('classDesc'),
     timeRange: document.getElementById('studentLectureTimeRange'),
     remaining: document.getElementById('studentLectureRemaining'),
+    progress: document.getElementById('studentLectureProgress'),
     track: document.getElementById('studentLectureProgressTrack'),
     fill: document.getElementById('studentLectureProgressFill'),
     nowLine: document.getElementById('studentLectureNowLine'),
@@ -323,14 +324,21 @@
     }
 
     remaining.textContent = statusText;
-    safeSetAttribute(track, 'aria-valuetext', statusText);
+    // update accessible progress element (hidden) with textual status
+    safeSetAttribute(elements.progress, 'aria-valuetext', statusText);
 
     // Update progress bar position
     const progressPercent = Math.max(0, Math.min(100, progressRatio * 100));
     nowLine.style.left = `${progressPercent}%`;
     fill.style.width = `${progressPercent}%`;
 
-    safeSetAttribute(track, 'aria-valuenow', String(Math.round(progressPercent)));
+    // update the <progress> value for assistive tech
+    if (elements.progress) {
+      try {
+        elements.progress.value = Math.round(progressPercent);
+      } catch {}
+      safeSetAttribute(elements.progress, 'aria-valuenow', String(Math.round(progressPercent)));
+    }
   }
 
   /**
