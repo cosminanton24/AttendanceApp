@@ -1,0 +1,82 @@
+@using AttendanceApp.Domain.Enums
+@model AttendanceApp.Web.Models.ProfileViewModel
+
+<div class="profile-card">
+    <div class="profile-header">
+        <div class="profile-avatar">
+            @{
+                var parts = Model.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                string initials;
+                if (parts.Length >= 2)
+                {
+                    initials = $"{parts[0][0]}{parts[^1][0]}";
+                }
+                else if (!string.IsNullOrEmpty(Model.Name))
+                {
+                    initials = Model.Name[0].ToString();
+                }
+                else
+                {
+                    initials = "?";
+                }
+            }
+            <span>@initials.ToUpper()</span>
+        </div>
+        <div class="profile-info">
+            <h1 class="profile-name">@Model.Name</h1>
+            <p class="profile-email">@Model.Email</p>
+            @{
+                string badgeClass;
+                if (Model.UserType == UserType.Professor)
+                {
+                    badgeClass = "badge-professor";
+                }
+                else if (Model.UserType == UserType.Admin)
+                {
+                    badgeClass = "badge-admin";
+                }
+                else
+                {
+                    badgeClass = "badge-student";
+                }
+            }
+            <span class="profile-badge @badgeClass">
+                @Model.UserType.ToString()
+            </span>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="profile-stats">
+        <button class="stat-item" id="followersBtn" data-user-id="@Model.UserId">
+            <span class="stat-count">@Model.FollowersCount</span>
+            <span class="stat-label">Followers</span>
+        </button>
+        <div class="stat-divider"></div>
+        <button class="stat-item" id="followingBtn" data-user-id="@Model.UserId">
+            <span class="stat-count">@Model.FollowingCount</span>
+            <span class="stat-label">Following</span>
+        </button>
+    </div>
+
+    <!-- Actions -->
+    @if (Model.IsOwnProfile)
+    {
+        <div class="profile-actions">
+            <button id="logoutBtn" class="logout-btn">
+                Log Out
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="profile-actions">
+            <button id="followToggleBtn" 
+                    class="follow-btn @(Model.IsFollowing ? "following" : "")" 
+                    data-user-id="@Model.UserId"
+                    data-is-following="@Model.IsFollowing.ToString().ToLower()">
+                @(Model.IsFollowing ? "Following" : "Follow")
+            </button>
+        </div>
+    }
+</div>

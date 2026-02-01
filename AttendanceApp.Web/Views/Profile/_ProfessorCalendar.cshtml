@@ -1,0 +1,33 @@
+<!-- Professor Calendar -->
+<div class="profile-calendar" id="profileCalendar">
+    <div class="profile-cal-head">
+        <div class="profile-cal-title">
+            <button type="button" class="cal-nav" data-cal-prev aria-label="Previous month">‹</button>
+            <span data-cal-month></span>
+            <button type="button" class="cal-nav" data-cal-next aria-label="Next month">›</button>
+        </div>
+        <div class="profile-cal-actions">
+            <button type="button" class="cal-today" data-cal-today>Today</button>
+        </div>
+    </div>
+
+    <div class="profile-cal-body">
+        <!-- Month -->
+        <div class="cal-month">
+            <div class="cal-dow">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div class="cal-grid" data-cal-grid></div>
+        </div>
+        <!-- Day timeline -->
+        <div class="cal-day">
+            <div class="cal-day-head">
+                <span data-cal-daylabel></span>
+            </div>
+            <div class="cal-timeline">
+                <div class="cal-hours" data-cal-hours></div>
+                <div class="cal-events" data-cal-events></div>
+            </div>
+        </div>
+    </div>
+</div>
