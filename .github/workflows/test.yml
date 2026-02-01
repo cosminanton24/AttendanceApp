@@ -113,7 +113,7 @@ jobs:
             /k:"${SONAR_PROJECT_KEY}" \
             /o:"${SONAR_ORGANIZATION}" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/wwwroot/**"
 
       - name: Build (Release)
