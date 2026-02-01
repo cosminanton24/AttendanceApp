@@ -78,7 +78,9 @@ public sealed class ExceptionToResultBehavior<TRequest, TResponse>(
                 logger.LogError(ex, "Unhandled exception while handling {Request}", requestName);
                 break;
             default:
+#pragma warning disable CA1873
                 logger.LogInformation(ex, "Handled exception while handling {Request}", requestName);
+#pragma warning restore CA1873
                 break;
         }
     }

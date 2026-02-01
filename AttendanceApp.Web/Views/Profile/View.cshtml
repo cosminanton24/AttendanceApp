@@ -24,16 +24,41 @@
             <div class="profile-avatar">
                 @{
                     var parts = Model.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    var initials = parts.Length >= 2 
-                        ? $"{parts[0][0]}{parts[^1][0]}" 
-                        : Model.Name.Length > 0 ? Model.Name[0].ToString() : "?";
+                    string initials;
+                    if (parts.Length >= 2)
+                    {
+                        initials = $"{parts[0][0]}{parts[^1][0]}";
+                    }
+                    else if (!string.IsNullOrEmpty(Model.Name))
+                    {
+                        initials = Model.Name[0].ToString();
+                    }
+                    else
+                    {
+                        initials = "?";
+                    }
                 }
                 <span>@initials.ToUpper()</span>
             </div>
             <div class="profile-info">
                 <h1 class="profile-name">@Model.Name</h1>
                 <p class="profile-email">@Model.Email</p>
-                <span class="profile-badge @(Model.UserType == UserType.Professor ? "badge-professor" : Model.UserType == UserType.Admin ? "badge-admin" : "badge-student")">
+                @{
+                    string badgeClass;
+                    if (Model.UserType == UserType.Professor)
+                    {
+                        badgeClass = "badge-professor";
+                    }
+                    else if (Model.UserType == UserType.Admin)
+                    {
+                        badgeClass = "badge-admin";
+                    }
+                    else
+                    {
+                        badgeClass = "badge-student";
+                    }
+                }
+                <span class="profile-badge @badgeClass">
                     @Model.UserType.ToString()
                 </span>
             </div>

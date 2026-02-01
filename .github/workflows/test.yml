@@ -114,7 +114,7 @@ jobs:
             /o:"${SONAR_ORGANIZATION}" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/wwwroot/**"
+            /d:sonar.exclusions="**/wwwroot/**, **/Migrations/**"
 
       - name: Build (Release)
         shell: bash

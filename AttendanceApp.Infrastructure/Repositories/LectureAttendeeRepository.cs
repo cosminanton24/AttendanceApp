@@ -24,7 +24,7 @@ public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepos
             query = query.Where(a => 
                 _context.Users.Any(u => 
                     u.Id == a.UserId && 
-                    (u.Name.ToLower().Contains(filter) || u.Email.ToLower().Contains(filter))));
+                    (u.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || u.Email.Contains(filter, StringComparison.CurrentCultureIgnoreCase))));
         }
 
         return await query.CountAsync(cancellationToken);
