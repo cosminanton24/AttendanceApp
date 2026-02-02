@@ -58,11 +58,13 @@ public class SubmitQuizCommandHandler(
         var selectedOptionsPerQuestion = new Dictionary<Guid, HashSet<Guid>>();
         foreach (var answer in userAnswers.Where(a => a.Choice))
         {
-            if (!selectedOptionsPerQuestion.ContainsKey(answer.QuestionId))
+            if (!selectedOptionsPerQuestion.TryGetValue(answer.QuestionId, out HashSet<Guid>? value))
             {
-                selectedOptionsPerQuestion[answer.QuestionId] = new HashSet<Guid>();
+                value = [];
+                selectedOptionsPerQuestion[answer.QuestionId] = value;
             }
-            selectedOptionsPerQuestion[answer.QuestionId].Add(answer.OptionId);
+
+            value.Add(answer.OptionId);
         }
 
         decimal totalScore = 0;

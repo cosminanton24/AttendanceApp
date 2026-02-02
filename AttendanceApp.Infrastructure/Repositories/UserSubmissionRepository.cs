@@ -1,12 +1,18 @@
 using AttendanceApp.Domain.Quizzes;
 using AttendanceApp.Domain.Repositories;
+using AttendanceApp.Domain.Users;
 using AttendanceApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace AttendanceApp.Infrastructure.Repositories;
 
-public class UserSubmissionRepository(AttendanceAppDbContext db) : GenericRepository<UserSubmission>(db), IUserSubmissionRepository
+public class UserSubmissionRepository : GenericRepository<UserSubmission>, IUserSubmissionRepository
 {
+    private readonly AttendanceAppDbContext db;
+    public UserSubmissionRepository(AttendanceAppDbContext _db) : base(_db)
+    {
+        db = _db;
+    }
     public async Task<UserSubmission?> GetByUserAndQuizLectureAsync(
         Guid userId,
         Guid quizLectureId,
@@ -65,7 +71,7 @@ public class UserSubmissionRepository(AttendanceAppDbContext db) : GenericReposi
             var term = searchTerm.ToLower();
             query = query.Where(us =>
                 db.Users.Any(u => u.Id == us.UserId &&
-                    (u.Name.ToLower().Contains(term) || u.Email.ToLower().Contains(term))));
+                    (u.Name.Contains(term, StringComparison.CurrentCultureIgnoreCase) || u.Email.Contains(term, StringComparison.CurrentCultureIgnoreCase))));
         }
 
         return await query
@@ -88,7 +94,7 @@ public class UserSubmissionRepository(AttendanceAppDbContext db) : GenericReposi
             var term = searchTerm.ToLower();
             query = query.Where(us =>
                 db.Users.Any(u => u.Id == us.UserId &&
-                    (u.Name.ToLower().Contains(term) || u.Email.ToLower().Contains(term))));
+                    (u.Name.Contains(term, StringComparison.CurrentCultureIgnoreCase) || u.Email.Contains(term, StringComparison.CurrentCultureIgnoreCase))));
         }
 
         return await query.CountAsync(cancellationToken);

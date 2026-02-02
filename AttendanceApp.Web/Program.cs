@@ -59,8 +59,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
 builder.Services.AddValidatorsFromAssembly(typeof(IAssemblyMarker).Assembly);
  
 //pipelines
-builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionToResultBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionToResultBehavior<,>));
  
 //repos
 builder.Services.AddScoped<IUserRepository, UserRepository>();
