@@ -9,7 +9,7 @@ public class QuizOptionTests
     private readonly int _order = 1;
     private readonly bool _isCorrect = false;
 
-    private QuizQuestion CreateQuestion()
+    private static QuizQuestion CreateQuestion()
     {
         var quiz = Quiz.Create("Test Quiz", TimeSpan.FromMinutes(30), Guid.NewGuid(), DateTime.UtcNow);
         return quiz.AddQuestion("Test Question", 1, 5m);
