@@ -3,6 +3,7 @@ using System;
 using AttendanceApp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AttendanceApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AttendanceAppDbContext))]
-    partial class AttendanceAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260202110833_AddUserAnswers")]
+    partial class AddUserAnswers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -204,39 +207,6 @@ namespace AttendanceApp.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("user_answers", (string)null);
-                });
-
-            modelBuilder.Entity("AttendanceApp.Domain.Quizzes.UserSubmission", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("MaxScore")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("QuizLectureId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Score")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<bool>("Submitted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("SubmittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "QuizLectureId")
-                        .IsUnique();
-
-                    b.ToTable("user_submissions", (string)null);
                 });
 
             modelBuilder.Entity("AttendanceApp.Domain.Users.User", b =>

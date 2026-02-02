@@ -58,6 +58,63 @@
         <div id="studentLectureNowLine" class="student-lecture-progress__now" aria-hidden="true"></div>
       </div>
     </div>
+
+    <!-- Active Quiz Section -->
+    <div id="activeQuizSection" class="student-quiz" hidden>
+      <div class="student-quiz__header">
+        <div class="student-quiz__info">
+          <div class="student-quiz__title">Active Quiz</div>
+          <div id="quizName" class="student-quiz__name"></div>
+          <div id="quizEndTime" class="student-quiz__end-time"></div>
+        </div>
+        <div class="student-quiz__timer">
+          <svg class="student-quiz__timer-svg" viewBox="0 0 100 100">
+            <circle class="student-quiz__timer-bg" cx="50" cy="50" r="45"></circle>
+            <circle id="quizTimerCircle" class="student-quiz__timer-circle" cx="50" cy="50" r="45"></circle>
+          </svg>
+          <div id="quizTimeLeft" class="student-quiz__time-left"></div>
+        </div>
+      </div>
+      <div class="student-quiz__body">
+        <div class="student-quiz__question-header">
+          <span id="quizQuestionNumber" class="student-quiz__question-num"></span>
+          <span id="quizQuestionPoints" class="student-quiz__question-pts"></span>
+        </div>
+        <div id="quizQuestionText" class="student-quiz__question-text"></div>
+        <div id="quizOptions" class="student-quiz__options"></div>
+      </div>
+      <div class="student-quiz__nav">
+        <button type="button" id="quizPrevBtn" class="student-quiz__nav-btn" aria-label="Previous question">
+          <span>&lt;</span>
+        </button>
+        <div id="quizQuestionDots" class="student-quiz__dots"></div>
+        <button type="button" id="quizNextBtn" class="student-quiz__nav-btn" aria-label="Next question">
+          <span>&gt;</span>
+        </button>
+      </div>
+      <div class="student-quiz__footer">
+        <button type="button" id="quizSubmitBtn" class="student-quiz__submit-btn">Submit Quiz</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quiz Submit Confirmation Modal -->
+<div class="student-quiz-modal" id="quizSubmitModal" aria-hidden="true">
+  <div class="student-quiz-modal__backdrop" data-close-quiz-modal></div>
+  <div class="student-quiz-modal__content">
+    <div class="student-quiz-modal__header">
+      <h2 class="student-quiz-modal__title">Submit Quiz</h2>
+      <button type="button" class="student-quiz-modal__close" data-close-quiz-modal aria-label="Close">✕</button>
+    </div>
+    <div class="student-quiz-modal__body">
+      <p>Are you sure you want to submit your quiz?</p>
+      <p id="quizSubmitUnanswered" class="student-quiz-modal__warning"></p>
+    </div>
+    <div class="student-quiz-modal__footer">
+      <button type="button" class="student-quiz-modal__btn student-quiz-modal__btn--secondary" data-close-quiz-modal>Cancel</button>
+      <button type="button" id="quizConfirmSubmitBtn" class="student-quiz-modal__btn student-quiz-modal__btn--primary">Submit</button>
+    </div>
   </div>
 </div>
 

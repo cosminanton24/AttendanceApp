@@ -13,6 +13,12 @@
   /** Progress update interval in milliseconds */
   const PROGRESS_UPDATE_INTERVAL_MS = 15000;
 
+  /** Quiz timer update interval in milliseconds */
+  const QUIZ_TIMER_UPDATE_INTERVAL_MS = 1000;
+
+  /** Warning threshold for quiz timer (5 minutes in ms) */
+  const QUIZ_WARNING_THRESHOLD_MS = 5 * 60 * 1000;
+
   /** Default lecture duration in minutes */
   const DEFAULT_DURATION_MINUTES = 60;
 
@@ -45,7 +51,12 @@
 
   const state = {
     lectureProgressTimer: null,
-    activeLectureWindow: null
+    activeLectureWindow: null,
+    activeLectureId: null,
+    activeQuiz: null,
+    quizTimer: null,
+    currentQuestionIndex: 0,
+    selectedAnswers: {} // Map of questionId -> optionId (single) or Set of optionIds (multiple)
   };
 
   // Initialize global status map for calendar pills
@@ -67,7 +78,24 @@
     fill: document.getElementById('studentLectureProgressFill'),
     nowLine: document.getElementById('studentLectureNowLine'),
     joinBtn: document.getElementById('joinClassBtn'),
-    classIdInput: document.getElementById('classIdInput')
+    classIdInput: document.getElementById('classIdInput'),
+    // Quiz elements
+    quizSection: document.getElementById('activeQuizSection'),
+    quizName: document.getElementById('quizName'),
+    quizEndTime: document.getElementById('quizEndTime'),
+    quizTimerCircle: document.getElementById('quizTimerCircle'),
+    quizTimeLeft: document.getElementById('quizTimeLeft'),
+    quizQuestionNumber: document.getElementById('quizQuestionNumber'),
+    quizQuestionPoints: document.getElementById('quizQuestionPoints'),
+    quizQuestionText: document.getElementById('quizQuestionText'),
+    quizOptions: document.getElementById('quizOptions'),
+    quizPrevBtn: document.getElementById('quizPrevBtn'),
+    quizNextBtn: document.getElementById('quizNextBtn'),
+    quizQuestionDots: document.getElementById('quizQuestionDots'),
+    quizSubmitBtn: document.getElementById('quizSubmitBtn'),
+    quizSubmitModal: document.getElementById('quizSubmitModal'),
+    quizSubmitUnanswered: document.getElementById('quizSubmitUnanswered'),
+    quizConfirmSubmitBtn: document.getElementById('quizConfirmSubmitBtn')
   };
 
   // Early exit if required elements are missing
@@ -283,11 +311,22 @@
     elements.inClassState.hidden = true;
 
     state.activeLectureWindow = null;
+    state.activeLectureId = null;
 
     if (state.lectureProgressTimer) {
       clearInterval(state.lectureProgressTimer);
       state.lectureProgressTimer = null;
     }
+
+    // Hide quiz section when not in class
+    if (elements.quizSection) {
+      elements.quizSection.hidden = true;
+    }
+    if (state.quizTimer) {
+      clearInterval(state.quizTimer);
+      state.quizTimer = null;
+    }
+    state.activeQuiz = null;
   }
 
   /**
@@ -380,6 +419,789 @@
 
     elements.joinState.hidden = true;
     elements.inClassState.hidden = false;
+
+    // Check for active quiz after showing in-class state
+    const lectureId = getItemProperty(item, 'id', 'Id', null);
+    if (lectureId) {
+      state.activeLectureId = lectureId;
+      fetchAndDisplayActiveQuiz(lectureId);
+    }
+  }
+
+  // ============================================================================
+  // Quiz Functions
+  // ============================================================================
+
+  /**
+   * Escapes HTML special characters.
+   * @param {string} str - The string to escape.
+   * @returns {string} The escaped string.
+   */
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  /**
+   * Parses a duration string to milliseconds.
+   * @param {string|null} duration - The duration string.
+   * @returns {number} The duration in milliseconds.
+   */
+  function parseDurationToMs(duration) {
+    if (!duration) {
+      return 0;
+    }
+
+    const str = String(duration).trim();
+
+    // hh:mm:ss format
+    const hhmmss = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(str);
+    if (hhmmss) {
+      const hours = Number(hhmmss[1]);
+      const mins = Number(hhmmss[2]);
+      const secs = Number(hhmmss[3]);
+      return (hours * 3600 + mins * 60 + secs) * 1000;
+    }
+
+    // hh:mm format
+    const hhmm = /^(\d{1,2}):(\d{2})$/.exec(str);
+    if (hhmm) {
+      const hours = Number(hhmm[1]);
+      const mins = Number(hhmm[2]);
+      return (hours * 3600 + mins * 60) * 1000;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Formats time in mm:ss or hh:mm:ss format.
+   * @param {number} ms - Milliseconds.
+   * @returns {string} Formatted time string.
+   */
+  function formatTimeCompact(ms) {
+    if (ms <= 0) {
+      return '0:00';
+    }
+
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+
+  /**
+   * Fetches the active quiz for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {Promise<Object|null>} The active quiz or null.
+   */
+  async function fetchActiveQuizForLecture(lectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/lecture/${encodeURIComponent(String(lectureId))}/active`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      return data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetches user's saved answers for a quiz lecture.
+   * @param {string} quizLectureId - The quiz lecture ID.
+   * @returns {Promise<Array>} The user answers array.
+   */
+  async function fetchUserAnswers(quizLectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/quiz-lecture/${encodeURIComponent(String(quizLectureId))}/answers`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetches user's submission for a quiz lecture.
+   * @param {string} quizLectureId - The quiz lecture ID.
+   * @returns {Promise<Object|null>} The submission or null.
+   */
+  async function fetchUserSubmission(quizLectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/quiz-lecture/${encodeURIComponent(String(quizLectureId))}/submission`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      return data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Saves a user answer to the server.
+   * @param {string} quizLectureId - The quiz lecture ID.
+   * @param {string} questionId - The question ID.
+   * @param {string} optionId - The option ID.
+   * @param {boolean} choice - Whether the option is selected.
+   * @returns {Promise<boolean>} True if saved successfully.
+   */
+  async function saveUserAnswer(quizLectureId, questionId, optionId, choice) {
+    try {
+      const response = await fetch('/api/quizzes/answer', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          quizLectureId: quizLectureId,
+          questionId: questionId,
+          optionId: optionId,
+          choice: choice
+        })
+      });
+
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Clears the quiz timer.
+   */
+  function clearQuizTimer() {
+    if (state.quizTimer) {
+      clearInterval(state.quizTimer);
+      state.quizTimer = null;
+    }
+  }
+
+  /**
+   * Hides the quiz section.
+   */
+  function hideQuizSection() {
+    if (elements.quizSection) {
+      elements.quizSection.hidden = true;
+    }
+    clearQuizTimer();
+    state.activeQuiz = null;
+    state.currentQuestionIndex = 0;
+    state.selectedAnswers = {};
+  }
+
+  /**
+   * Updates the circular timer display.
+   */
+  function updateQuizTimer() {
+    const quiz = state.activeQuiz;
+    if (!quiz) {
+      hideQuizSection();
+      return;
+    }
+
+    const activatedAt = quiz.activatedAtUtc ?? quiz.ActivatedAtUtc ?? quiz.activatedAt ?? quiz.ActivatedAt;
+    const endTimeUtc = quiz.endTimeUtc ?? quiz.EndTimeUtc;
+    const duration = quiz.duration ?? quiz.Duration;
+
+    if (!activatedAt) {
+      hideQuizSection();
+      return;
+    }
+
+    const startTime = new Date(activatedAt);
+    let endTime;
+    let totalMs;
+
+    if (endTimeUtc) {
+      endTime = new Date(endTimeUtc);
+      totalMs = Math.max(1, endTime.getTime() - startTime.getTime());
+    } else if (duration) {
+      const durationMs = parseDurationToMs(duration);
+      totalMs = Math.max(1, durationMs);
+      endTime = new Date(startTime.getTime() + totalMs);
+    } else {
+      hideQuizSection();
+      return;
+    }
+
+    const now = new Date();
+    const remainingMs = endTime.getTime() - now.getTime();
+
+    // Quiz ended
+    if (remainingMs <= 0) {
+      hideQuizSection();
+      return;
+    }
+
+    const elapsedMs = now.getTime() - startTime.getTime();
+    const progressRatio = Math.max(0, Math.min(1, elapsedMs / totalMs));
+
+    // Update circular timer (SVG stroke-dashoffset)
+    // Circle circumference is 2 * PI * 45 ≈ 283
+    const circumference = 283;
+    const offset = circumference * progressRatio;
+
+    if (elements.quizTimerCircle) {
+      elements.quizTimerCircle.style.strokeDashoffset = String(offset);
+
+      // Add warning class when < 5 minutes
+      if (remainingMs < QUIZ_WARNING_THRESHOLD_MS) {
+        elements.quizTimerCircle.classList.add('warning');
+      } else {
+        elements.quizTimerCircle.classList.remove('warning');
+      }
+    }
+
+    if (elements.quizTimeLeft) {
+      elements.quizTimeLeft.textContent = formatTimeCompact(remainingMs);
+
+      if (remainingMs < QUIZ_WARNING_THRESHOLD_MS) {
+        elements.quizTimeLeft.classList.add('warning');
+      } else {
+        elements.quizTimeLeft.classList.remove('warning');
+      }
+    }
+  }
+
+  /**
+   * Checks if an option is selected for a question.
+   * @param {string} questionId - The question ID.
+   * @param {string} optionId - The option ID.
+   * @returns {boolean} True if selected.
+   */
+  function isOptionSelected(questionId, optionId) {
+    const selected = state.selectedAnswers[questionId];
+    if (!selected) {
+      return false;
+    }
+    if (selected instanceof Set) {
+      return selected.has(optionId);
+    }
+    return selected === optionId;
+  }
+
+  /**
+   * Checks if a question has any answer selected.
+   * @param {string} questionId - The question ID.
+   * @returns {boolean} True if answered.
+   */
+  function isQuestionAnswered(questionId) {
+    const selected = state.selectedAnswers[questionId];
+    if (!selected) {
+      return false;
+    }
+    if (selected instanceof Set) {
+      return selected.size > 0;
+    }
+    return true;
+  }
+
+  /**
+   * Counts correct options for a question to determine if multiple choice.
+   * @param {Object} question - The question object.
+   * @returns {number} Number of correct options.
+   */
+  function countCorrectOptions(question) {
+    const options = question?.options ?? question?.Options ?? [];
+    return options.filter(function (opt) {
+      return opt?.isCorrect ?? opt?.IsCorrect ?? false;
+    }).length;
+  }
+
+  /**
+   * Renders the current question.
+   */
+  function renderCurrentQuestion() {
+    const quiz = state.activeQuiz;
+    if (!quiz) {
+      return;
+    }
+
+    const questions = quiz.questions ?? quiz.Questions ?? [];
+    if (questions.length === 0) {
+      if (elements.quizQuestionText) {
+        elements.quizQuestionText.textContent = 'No questions available.';
+      }
+      return;
+    }
+
+    const index = Math.max(0, Math.min(state.currentQuestionIndex, questions.length - 1));
+    const question = questions[index];
+    const questionId = question?.id ?? question?.Id;
+
+    // Update question number
+    if (elements.quizQuestionNumber) {
+      elements.quizQuestionNumber.textContent = `Question ${index + 1} of ${questions.length}`;
+    }
+
+    // Update points
+    if (elements.quizQuestionPoints) {
+      const points = question?.points ?? question?.Points ?? 0;
+      elements.quizQuestionPoints.textContent = points === 1 ? '1 point' : `${points} points`;
+    }
+
+    // Update question text
+    if (elements.quizQuestionText) {
+      elements.quizQuestionText.textContent = question?.text ?? question?.Text ?? '';
+    }
+
+    // Render options
+    if (elements.quizOptions) {
+      const options = question?.options ?? question?.Options ?? [];
+      const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+      elements.quizOptions.innerHTML = options.map(function (opt, i) {
+        const optId = opt?.id ?? opt?.Id;
+        const optText = opt?.text ?? opt?.Text ?? '';
+        const isSelected = isOptionSelected(questionId, optId);
+        const letter = optionLetters[i] || String(i + 1);
+
+        return `
+          <div class="student-quiz__option${isSelected ? ' selected' : ''}" data-option-id="${escapeHtml(optId)}" data-question-id="${escapeHtml(questionId)}">
+            <div class="student-quiz__option-marker">${isSelected ? '✓' : letter}</div>
+            <div class="student-quiz__option-text">${escapeHtml(optText)}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Wire up option click handlers - all options are toggleable (multiple choice)
+      elements.quizOptions.querySelectorAll('.student-quiz__option').forEach(function (optEl) {
+        optEl.addEventListener('click', function () {
+          const optionId = optEl.dataset.optionId;
+          const qId = optEl.dataset.questionId;
+
+          // Toggle selection (always multiple choice behavior)
+          let selected = state.selectedAnswers[qId];
+          if (!(selected instanceof Set)) {
+            selected = new Set();
+            state.selectedAnswers[qId] = selected;
+          }
+
+          const isNowSelected = !selected.has(optionId);
+          if (isNowSelected) {
+            selected.add(optionId);
+          } else {
+            selected.delete(optionId);
+          }
+
+          // Re-render to update checkmarks
+          renderCurrentQuestion();
+
+          // Save answer to server (fire and forget)
+          const quizLectureId = state.activeQuiz?.quizLectureId ?? state.activeQuiz?.QuizLectureId;
+          if (quizLectureId) {
+            saveUserAnswer(quizLectureId, qId, optionId, isNowSelected);
+          }
+        });
+      });
+    }
+
+    // Update navigation buttons
+    if (elements.quizPrevBtn) {
+      elements.quizPrevBtn.disabled = index === 0;
+    }
+    if (elements.quizNextBtn) {
+      elements.quizNextBtn.disabled = index >= questions.length - 1;
+    }
+
+    // Render question dots
+    renderQuestionDots();
+  }
+
+  /**
+   * Renders the question navigation dots.
+   */
+  function renderQuestionDots() {
+    const quiz = state.activeQuiz;
+    if (!quiz || !elements.quizQuestionDots) {
+      return;
+    }
+
+    const questions = quiz.questions ?? quiz.Questions ?? [];
+    const currentIndex = state.currentQuestionIndex;
+
+    elements.quizQuestionDots.innerHTML = questions.map(function (q, i) {
+      const qId = q?.id ?? q?.Id;
+      const isAnswered = isQuestionAnswered(qId);
+      const isActive = i === currentIndex;
+
+      let classes = 'student-quiz__dot';
+      if (isActive) {
+        classes += ' active';
+      }
+      if (isAnswered) {
+        classes += ' answered';
+      }
+
+      return `<div class="${classes}" data-question-index="${i}"></div>`;
+    }).join('');
+
+    // Wire up dot click handlers
+    elements.quizQuestionDots.querySelectorAll('.student-quiz__dot').forEach(function (dot) {
+      dot.addEventListener('click', function () {
+        const idx = Number.parseInt(dot.dataset.questionIndex, 10);
+        if (!Number.isNaN(idx)) {
+          state.currentQuestionIndex = idx;
+          renderCurrentQuestion();
+        }
+      });
+    });
+  }
+
+  /**
+   * Displays the active quiz.
+   * @param {Object} quiz - The quiz data.
+   */
+  async function displayActiveQuiz(quiz) {
+    if (!quiz || !elements.quizSection) {
+      hideQuizSection();
+      return;
+    }
+
+    state.activeQuiz = quiz;
+    state.currentQuestionIndex = 0;
+    state.selectedAnswers = {};
+
+    const quizLectureId = quiz.quizLectureId ?? quiz.QuizLectureId;
+
+    // Check if user already submitted this quiz
+    if (quizLectureId) {
+      try {
+        const submission = await fetchUserSubmission(quizLectureId);
+        if (submission && submission.submitted) {
+          // Show result view directly
+          elements.quizSection.hidden = false;
+          displayQuizResultFromSubmission(quiz, submission);
+          return;
+        }
+      } catch (err) {
+        console.error('[StudentHome] Failed to check submission:', err);
+      }
+    }
+
+    // Load saved answers if any
+    if (quizLectureId) {
+      try {
+        const savedAnswers = await fetchUserAnswers(quizLectureId);
+        // Populate selectedAnswers from saved answers (only those with choice = true)
+        savedAnswers.forEach(function (answer) {
+          const qId = answer.questionId ?? answer.QuestionId;
+          const optId = answer.optionId ?? answer.OptionId;
+          const choice = answer.choice ?? answer.Choice;
+
+          if (choice) {
+            if (!state.selectedAnswers[qId]) {
+              state.selectedAnswers[qId] = new Set();
+            }
+            state.selectedAnswers[qId].add(optId);
+          }
+        });
+      } catch (err) {
+        console.error('[StudentHome] Failed to load saved answers:', err);
+      }
+    }
+
+    // Show section
+    elements.quizSection.hidden = false;
+
+    // Set quiz name
+    if (elements.quizName) {
+      elements.quizName.textContent = quiz.name ?? quiz.Name ?? 'Quiz';
+    }
+
+    // Set end time
+    if (elements.quizEndTime) {
+      const endTimeUtc = quiz.endTimeUtc ?? quiz.EndTimeUtc;
+      if (endTimeUtc) {
+        try {
+          const endTime = new Date(endTimeUtc);
+          elements.quizEndTime.textContent = `Ends at ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        } catch {
+          elements.quizEndTime.textContent = '';
+        }
+      } else {
+        elements.quizEndTime.textContent = '';
+      }
+    }
+
+    // Initialize timer
+    updateQuizTimer();
+    clearQuizTimer();
+    state.quizTimer = setInterval(updateQuizTimer, QUIZ_TIMER_UPDATE_INTERVAL_MS);
+
+    // Render first question
+    renderCurrentQuestion();
+
+    // Wire up navigation buttons
+    if (elements.quizPrevBtn) {
+      elements.quizPrevBtn.onclick = function () {
+        if (state.currentQuestionIndex > 0) {
+          state.currentQuestionIndex--;
+          renderCurrentQuestion();
+        }
+      };
+    }
+
+    if (elements.quizNextBtn) {
+      elements.quizNextBtn.onclick = function () {
+        const questions = state.activeQuiz?.questions ?? state.activeQuiz?.Questions ?? [];
+        if (state.currentQuestionIndex < questions.length - 1) {
+          state.currentQuestionIndex++;
+          renderCurrentQuestion();
+        }
+      };
+    }
+
+    // Wire up submit button
+    if (elements.quizSubmitBtn) {
+      elements.quizSubmitBtn.onclick = function () {
+        openQuizSubmitModal();
+      };
+    }
+  }
+
+  /**
+   * Opens the quiz submit confirmation modal.
+   */
+  function openQuizSubmitModal() {
+    if (!elements.quizSubmitModal) return;
+
+    // Count unanswered questions
+    const questions = state.activeQuiz?.questions ?? state.activeQuiz?.Questions ?? [];
+    let unansweredCount = 0;
+
+    questions.forEach(function (question) {
+      const questionId = question?.id ?? question?.Id;
+      const selected = state.selectedAnswers[questionId];
+      
+      // Check if no answer selected
+      if (!selected || (selected instanceof Set && selected.size === 0)) {
+        unansweredCount++;
+      }
+    });
+
+    // Update warning message
+    if (elements.quizSubmitUnanswered) {
+      if (unansweredCount > 0) {
+        elements.quizSubmitUnanswered.textContent = `You have ${unansweredCount} unanswered question${unansweredCount > 1 ? 's' : ''}.`;
+        elements.quizSubmitUnanswered.hidden = false;
+      } else {
+        elements.quizSubmitUnanswered.textContent = '';
+        elements.quizSubmitUnanswered.hidden = true;
+      }
+    }
+
+    elements.quizSubmitModal.classList.add('open');
+    elements.quizSubmitModal.setAttribute('aria-hidden', 'false');
+  }
+
+  /**
+   * Closes the quiz submit confirmation modal.
+   */
+  function closeQuizSubmitModal() {
+    if (!elements.quizSubmitModal) return;
+    elements.quizSubmitModal.classList.remove('open');
+    elements.quizSubmitModal.setAttribute('aria-hidden', 'true');
+  }
+
+  /**
+   * Handles the quiz submission.
+   */
+  async function handleQuizSubmit() {
+    const quizLectureId = state.activeQuiz?.quizLectureId ?? state.activeQuiz?.QuizLectureId;
+    if (!quizLectureId) {
+      console.error('[StudentHome] No quiz lecture ID found');
+      closeQuizSubmitModal();
+      return;
+    }
+
+    // Disable submit button while processing
+    if (elements.quizConfirmSubmitBtn) {
+      elements.quizConfirmSubmitBtn.disabled = true;
+      elements.quizConfirmSubmitBtn.textContent = 'Submitting...';
+    }
+
+    try {
+      const response = await fetch(`/api/quizzes/quiz-lecture/${encodeURIComponent(String(quizLectureId))}/submit`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit quiz');
+      }
+
+      const result = await response.json();
+      closeQuizSubmitModal();
+      displayQuizResult(result);
+    } catch (error) {
+      console.error('[StudentHome] Failed to submit quiz:', error);
+      // Re-enable button on error
+      if (elements.quizConfirmSubmitBtn) {
+        elements.quizConfirmSubmitBtn.disabled = false;
+        elements.quizConfirmSubmitBtn.textContent = 'Submit';
+      }
+    }
+  }
+
+  /**
+   * Displays the quiz result after submission.
+   * @param {Object} result - The quiz result from the API.
+   */
+  function displayQuizResult(result) {
+    const score = result.score ?? result.Score ?? 0;
+    const maxScore = result.maxScore ?? result.MaxScore ?? 0;
+    const correctQuestions = result.correctQuestions ?? result.CorrectQuestions ?? 0;
+    const totalQuestions = result.totalQuestions ?? result.TotalQuestions ?? 0;
+
+    // Stop the timer
+    clearQuizTimer();
+
+    // Replace quiz content with result
+    if (elements.quizSection) {
+      const quizName = state.activeQuiz?.name ?? state.activeQuiz?.Name ?? 'Quiz';
+      const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+      const icon = percentage >= 70 ? '🎉' : percentage >= 50 ? '👍' : '📚';
+
+      elements.quizSection.innerHTML = `
+        <div class="student-quiz__header">
+          <div class="student-quiz__info">
+            <div class="student-quiz__title">Quiz Completed</div>
+            <div class="student-quiz__name">${escapeHtml(quizName)}</div>
+          </div>
+        </div>
+        <div class="student-quiz__result">
+          <div class="student-quiz__result-icon">${icon}</div>
+          <div class="student-quiz__result-title">Your Score</div>
+          <div class="student-quiz__result-score">${score} / ${maxScore}</div>
+          <div class="student-quiz__result-details">
+            ${correctQuestions} of ${totalQuestions} questions correct (${percentage}%)
+          </div>
+        </div>
+      `;
+    }
+
+    // Clear state
+    state.activeQuiz = null;
+    state.selectedAnswers = {};
+    state.currentQuestionIndex = 0;
+  }
+
+  /**
+   * Displays the quiz result from a saved submission (on page reload).
+   * @param {Object} quiz - The quiz data.
+   * @param {Object} submission - The submission data.
+   */
+  function displayQuizResultFromSubmission(quiz, submission) {
+    const score = submission.score ?? submission.Score ?? 0;
+    const maxScore = submission.maxScore ?? submission.MaxScore ?? 0;
+    const quizName = quiz.name ?? quiz.Name ?? 'Quiz';
+    const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+    const icon = percentage >= 70 ? '🎉' : percentage >= 50 ? '👍' : '📚';
+
+    if (elements.quizSection) {
+      elements.quizSection.innerHTML = `
+        <div class="student-quiz__header">
+          <div class="student-quiz__info">
+            <div class="student-quiz__title">Quiz Completed</div>
+            <div class="student-quiz__name">${escapeHtml(quizName)}</div>
+          </div>
+        </div>
+        <div class="student-quiz__result">
+          <div class="student-quiz__result-icon">${icon}</div>
+          <div class="student-quiz__result-title">Your Score</div>
+          <div class="student-quiz__result-score">${score} / ${maxScore}</div>
+          <div class="student-quiz__result-details">
+            (${percentage}%)
+          </div>
+        </div>
+      `;
+    }
+
+    // Clear state
+    state.activeQuiz = null;
+    state.selectedAnswers = {};
+    state.currentQuestionIndex = 0;
+  }
+
+  /**
+   * Initializes the quiz submit modal event handlers.
+   */
+  function initQuizSubmitModal() {
+    if (!elements.quizSubmitModal) return;
+
+    // Close modal on backdrop click or close button click
+    elements.quizSubmitModal.querySelectorAll('[data-close-quiz-modal]').forEach(function (el) {
+      el.addEventListener('click', closeQuizSubmitModal);
+    });
+
+    // Confirm submit button
+    if (elements.quizConfirmSubmitBtn) {
+      elements.quizConfirmSubmitBtn.addEventListener('click', handleQuizSubmit);
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && elements.quizSubmitModal.classList.contains('open')) {
+        closeQuizSubmitModal();
+      }
+    });
+  }
+
+  /**
+   * Fetches and displays the active quiz for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   */
+  async function fetchAndDisplayActiveQuiz(lectureId) {
+    try {
+      const quiz = await fetchActiveQuizForLecture(lectureId);
+
+      if (quiz) {
+        await displayActiveQuiz(quiz);
+      } else {
+        hideQuizSection();
+      }
+    } catch (error) {
+      console.error('[StudentHome] Failed to fetch active quiz:', error);
+      hideQuizSection();
+    }
   }
 
   // ============================================================================
@@ -691,6 +1513,211 @@
   }
 
   // ============================================================================
+  // Lecture Popup (Calendar Click)
+  // ============================================================================
+
+  /**
+   * Fetches student quiz results for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {Promise<Array>} The quiz results.
+   */
+  async function fetchStudentQuizResults(lectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/lecture/${lectureId}/student-results`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[StudentHome] Failed to fetch student quiz results:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Creates the lecture popup element if it doesn't exist.
+   * @returns {HTMLElement} The popup element.
+   */
+  function ensureLecturePopup() {
+    let popup = document.getElementById('studentLecturePopup');
+
+    if (!popup) {
+      popup = document.createElement('div');
+      popup.id = 'studentLecturePopup';
+      popup.className = 'student-lecture-popup';
+      popup.innerHTML = `
+        <button type="button" class="slp-close" aria-label="Close">×</button>
+        <div class="slp-body">
+          <div class="slp-title"></div>
+          <div class="slp-time small text-muted"></div>
+          <div class="slp-quizzes-section">
+            <div class="slp-quizzes-title">Quizzes</div>
+            <div class="slp-quizzes-list"></div>
+            <div class="slp-quizzes-empty">No quizzes for this lecture.</div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(popup);
+
+      // Close on clicking the close button
+      const closeBtn = popup.querySelector('.slp-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function (event) {
+          event.stopPropagation();
+          popup.style.display = 'none';
+        });
+      }
+
+      // Stop clicks inside popup from bubbling
+      popup.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+
+      // Close on outside click
+      document.addEventListener('click', function (event) {
+        if (!popup.contains(event.target)) {
+          popup.style.display = 'none';
+        }
+      });
+    }
+
+    return popup;
+  }
+
+  /**
+   * Positions the lecture popup relative to an element.
+   * @param {HTMLElement} popup - The popup element.
+   * @param {HTMLElement|null} anchorEl - The anchor element.
+   */
+  function positionLecturePopup(popup, anchorEl) {
+    popup.style.display = 'block';
+    popup.style.position = 'fixed';
+    popup.style.zIndex = '20000';
+
+    if (anchorEl) {
+      const rect = anchorEl.getBoundingClientRect();
+      const top = rect.top - popup.offsetHeight - 8;
+      const left = rect.left + (rect.width - popup.offsetWidth) / 2;
+      popup.style.top = `${Math.max(8, top)}px`;
+      popup.style.left = `${Math.max(8, left)}px`;
+    } else {
+      // Fallback: position near calendar popover
+      const calendarPopover = document.getElementById('calendarPopover');
+      if (calendarPopover) {
+        const popRect = calendarPopover.getBoundingClientRect();
+        const top = popRect.top - popup.offsetHeight - 8;
+        const left = popRect.left + (popRect.width - popup.offsetWidth) / 2;
+        popup.style.top = `${Math.max(8, top)}px`;
+        popup.style.left = `${Math.max(8, left)}px`;
+      }
+    }
+  }
+
+  /**
+   * Renders the quiz list in the popup.
+   * @param {HTMLElement} popup - The popup element.
+   * @param {Array} quizzes - The quiz results array.
+   */
+  function renderQuizList(popup, quizzes) {
+    const listEl = popup.querySelector('.slp-quizzes-list');
+    const emptyEl = popup.querySelector('.slp-quizzes-empty');
+
+    if (!listEl || !emptyEl) return;
+
+    listEl.innerHTML = '';
+
+    if (!quizzes || quizzes.length === 0) {
+      listEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    listEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+
+    quizzes.forEach(function (quiz) {
+      const quizName = quiz.quizName ?? quiz.QuizName ?? 'Quiz';
+      const hasSubmitted = quiz.hasSubmitted ?? quiz.HasSubmitted ?? false;
+      const score = quiz.score ?? quiz.Score;
+      const maxScore = quiz.maxScore ?? quiz.MaxScore;
+
+      const item = document.createElement('div');
+      item.className = 'slp-quiz-item';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'slp-quiz-name';
+      nameSpan.textContent = quizName;
+
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'slp-quiz-score';
+
+      if (hasSubmitted && score != null && maxScore != null) {
+        scoreSpan.textContent = `${score} / ${maxScore}`;
+        scoreSpan.classList.add('slp-quiz-score--submitted');
+      } else if (hasSubmitted) {
+        scoreSpan.textContent = 'Submitted';
+        scoreSpan.classList.add('slp-quiz-score--submitted');
+      } else {
+        scoreSpan.textContent = 'Not submitted';
+        scoreSpan.classList.add('slp-quiz-score--pending');
+      }
+
+      item.appendChild(nameSpan);
+      item.appendChild(scoreSpan);
+      listEl.appendChild(item);
+    });
+  }
+
+  /**
+   * Handles calendar event clicks to show the lecture popup.
+   * @param {Object} ev - The event object.
+   */
+  globalThis.onCalendarEventClick = async function (ev) {
+    try {
+      const eventEl = document.querySelector(`[data-event-id="${ev.id}"]`);
+      const popup = ensureLecturePopup();
+
+      const titleEl = popup.querySelector('.slp-title');
+      const timeEl = popup.querySelector('.slp-time');
+
+      if (titleEl) {
+        titleEl.textContent = ev.title || '';
+      }
+
+      if (timeEl) {
+        const startStr = new Date(ev.start).toLocaleString();
+        const endStr = new Date(ev.end).toLocaleString();
+        timeEl.textContent = `${startStr} — ${endStr}`;
+      }
+
+      // Show loading state
+      const listEl = popup.querySelector('.slp-quizzes-list');
+      const emptyEl = popup.querySelector('.slp-quizzes-empty');
+      if (listEl) listEl.innerHTML = '<div class="slp-loading">Loading...</div>';
+      if (listEl) listEl.style.display = 'block';
+      if (emptyEl) emptyEl.style.display = 'none';
+
+      positionLecturePopup(popup, eventEl);
+
+      // Fetch quiz results
+      const quizzes = await fetchStudentQuizResults(ev.id);
+      renderQuizList(popup, quizzes);
+
+      // Re-position after content load
+      positionLecturePopup(popup, eventEl);
+    } catch (error) {
+      console.error('[StudentHome] Calendar event click error:', error);
+    }
+  };
+
+  // ============================================================================
   // Event Listeners
   // ============================================================================
 
@@ -734,6 +1761,9 @@
 
     // Initialize calendar integration
     initCalendarIntegration();
+
+    // Initialize quiz submit modal
+    initQuizSubmitModal();
 
     // Detect active lecture and show appropriate UI
     detectAndShowActiveLecture().catch(function () {

@@ -19,6 +19,8 @@ public class AttendanceAppDbContext : DbContext
     public DbSet<QuizQuestion> QuizQuestions { get; set; }
     public DbSet<QuizOption> QuizOptions { get; set; }
     public DbSet<QuizLecture> QuizLectures { get; set; }
+    public DbSet<UserAnswer> UserAnswers { get; set; }
+    public DbSet<UserSubmission> UserSubmissions { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

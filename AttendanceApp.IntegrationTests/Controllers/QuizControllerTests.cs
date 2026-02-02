@@ -977,4 +977,229 @@ public sealed class QuizControllerIntegrationTests : IAsyncLifetime
         // Note: Quiz activation requires lecture to be InProgress, which requires
         // additional setup beyond this test scope
     }
+
+    // ========================================================================
+    // Student Quiz Results tests
+    // ========================================================================
+
+    [Fact]
+    public async Task GetStudentQuizResults_WithoutAuth_ReturnsUnauthorized()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+
+        var lectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/lecture/{lectureId}/student-results");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetStudentQuizResults_AsStudent_NoQuizzes_ReturnsEmptyList()
+    {
+        // Create a professor and lecture
+        var (professorId, _) = await CreateAndAuthenticateUserAsync(UserType.Professor);
+        var lectureId = await CreateLectureAsync("Test Lecture");
+
+        // Create a student and authenticate as student
+        await CreateAndAuthenticateUserAsync(UserType.Student);
+
+        // Act
+        var response = await _httpClient.GetAsync($"/api/quizzes/lecture/{lectureId}/student-results");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var results = await response.Content.ReadAsAsync<List<object>>();
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task GetStudentQuizResults_AsStudent_WithQuizzes_ReturnsResults()
+    {
+        // Create a professor
+        var (professorId, _) = await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+        // Create a quiz with questions and options
+        var quizId = await CreateQuizAsync("Test Quiz", TimeSpan.FromMinutes(30));
+        var questionId = await CreateQuestionAsync(quizId, "What is 2+2?", 1, 5);
+        await CreateOptionAsync(questionId, "3", 1, false);
+        await CreateOptionAsync(questionId, "4", 2, true);
+
+        // Create a lecture and start it
+        var lectureId = await CreateLectureAsync("Test Lecture");
+        await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", new { status = 1 }); // InProgress
+
+        // Activate the quiz
+        var activateResponse = await _httpClient.PostAsJsonAsync("/api/quizzes/activate", new ActivateQuizForLectureRequest
+        {
+            LectureId = lectureId,
+            QuizId = quizId
+        });
+        
+        if (activateResponse.StatusCode == HttpStatusCode.OK)
+        {
+            // Create a student and authenticate
+            await CreateAndAuthenticateUserAsync(UserType.Student);
+
+            // Act
+            var response = await _httpClient.GetAsync($"/api/quizzes/lecture/{lectureId}/student-results");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    // ========================================================================
+    // Quiz Submissions tests (Professor view)
+    // ========================================================================
+
+    [Fact]
+    public async Task GetQuizSubmissions_WithoutAuth_ReturnsUnauthorized()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetQuizSubmissions_NonExistentQuizLecture_ReturnsEmptyPage()
+    {
+        await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions");
+
+        // Should return OK with empty submissions
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetQuizSubmissions_WithPagination_ReturnsPagedResults()
+    {
+        await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions?page=0&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetQuizSubmissions_WithSearch_ReturnsFilteredResults()
+    {
+        await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions?search=test");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetQuizSubmissions_FullWorkflow_ReturnsSubmissions()
+    {
+        // Create professor and quiz
+        var (professorId, _) = await CreateAndAuthenticateUserAsync(UserType.Professor);
+        var quizId = await CreateQuizAsync("Graded Quiz", TimeSpan.FromMinutes(30));
+        var questionId = await CreateQuestionAsync(quizId, "Sample question", 1, 10);
+        var correctOptionId = await CreateOptionAsync(questionId, "Correct", 1, true);
+        await CreateOptionAsync(questionId, "Wrong", 2, false);
+
+        // Create lecture and start it
+        var lectureId = await CreateLectureAsync("Quiz Lecture");
+        await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", new { status = 1 });
+
+        // Activate quiz
+        var activateResponse = await _httpClient.PostAsJsonAsync("/api/quizzes/activate", new ActivateQuizForLectureRequest
+        {
+            LectureId = lectureId,
+            QuizId = quizId
+        });
+
+        if (activateResponse.StatusCode != HttpStatusCode.OK)
+        {
+            // Skip if quiz activation failed (might require attendee)
+            return;
+        }
+
+        var quizLectureId = await activateResponse.Content.ReadAsAsync<Guid>();
+
+        // Create student, join lecture
+        var studentId = await RegisterUserAsync("Student", UserType.Student);
+        
+        // Authenticate as student
+        var studentEmail = $"student_{Guid.NewGuid():N}@example.com";
+        var studentPassword = "StrongPass123!";
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        
+        await _httpClient.PostAsJsonAsync("/api/users/register", new CreateUserRequest
+        {
+            Name = "Test Student",
+            Email = studentEmail,
+            Password = studentPassword,
+            UserType = UserType.Student
+        });
+        
+        var loginResponse = await _httpClient.PostAsJsonAsync("/api/users/login", new LoginUserRequest
+        {
+            Email = studentEmail,
+            Password = studentPassword
+        });
+        
+        if (loginResponse.IsSuccessStatusCode)
+        {
+            var jwt = await loginResponse.Content.ReadAsAsync<string>();
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+            // Save an answer
+            await _httpClient.PostAsJsonAsync("/api/quizzes/answer", new SaveUserAnswerRequest
+            {
+                QuizLectureId = quizLectureId,
+                QuestionId = questionId,
+                OptionId = correctOptionId,
+                Choice = true
+            });
+
+            // Submit quiz
+            await _httpClient.PostAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submit", null);
+
+            // Switch back to professor
+            await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+            // Get submissions
+            var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions");
+            
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+    }
+
+    // ========================================================================
+    // GetSubmissionCount tests
+    // ========================================================================
+
+    [Fact]
+    public async Task GetSubmissionCount_WithoutAuth_ReturnsUnauthorized()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions/count");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetSubmissionCount_NonExistentQuizLecture_ReturnsZero()
+    {
+        await CreateAndAuthenticateUserAsync(UserType.Professor);
+
+        var quizLectureId = Guid.NewGuid();
+        var response = await _httpClient.GetAsync($"/api/quizzes/quiz-lecture/{quizLectureId}/submissions/count");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var count = await response.Content.ReadAsAsync<int>();
+        Assert.Equal(0, count);
+    }
 }

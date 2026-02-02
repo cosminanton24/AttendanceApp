@@ -5,4 +5,4 @@ using MediatR;
 namespace AttendanceApp.Application.Features.Quizzes.GetActiveQuizForLecture;
 
 public record GetActiveQuizForLectureQuery(Guid LectureId)
-    : IRequest<Result<QuizDetailDto?>>;
+    : IRequest<Result<ActiveQuizDto?>>;

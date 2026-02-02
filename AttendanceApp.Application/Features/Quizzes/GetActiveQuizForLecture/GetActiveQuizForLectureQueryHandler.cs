@@ -9,9 +9,9 @@ public class GetActiveQuizForLectureQueryHandler(
     IQuizLectureRepository quizLectureRepo,
     IQuizRepository quizRepo,
     ILectureRepository lectureRepo)
-    : IRequestHandler<GetActiveQuizForLectureQuery, Result<QuizDetailDto?>>
+    : IRequestHandler<GetActiveQuizForLectureQuery, Result<ActiveQuizDto?>>
 {
-    public async Task<Result<QuizDetailDto?>> Handle(GetActiveQuizForLectureQuery query, CancellationToken cancellationToken)
+    public async Task<Result<ActiveQuizDto?>> Handle(GetActiveQuizForLectureQuery query, CancellationToken cancellationToken)
     {
         _ = await lectureRepo.GetByIdAsync(query.LectureId, cancellationToken)
             ?? throw new KeyNotFoundException($"No lecture with id {query.LectureId} found.");
@@ -21,14 +21,14 @@ public class GetActiveQuizForLectureQueryHandler(
 
         if (activeQuizLecture is null)
         {
-            return Result<QuizDetailDto?>.Ok(null);
+            return Result<ActiveQuizDto?>.Ok(null);
         }
 
         var quiz = await quizRepo.GetByIdWithQuestionsAndOptionsAsync(activeQuizLecture.QuizId, cancellationToken);
 
         if (quiz is null)
         {
-            return Result<QuizDetailDto?>.Ok(null);
+            return Result<ActiveQuizDto?>.Ok(null);
         }
 
         var questionDtos = quiz.Questions.Select(q => new QuizQuestionDto(
@@ -45,15 +45,18 @@ public class GetActiveQuizForLectureQueryHandler(
             )).ToList()
         )).ToList();
 
-        var dto = new QuizDetailDto(
+        var dto = new ActiveQuizDto(
             quiz.Id,
+            activeQuizLecture.Id,
             quiz.Name,
             quiz.Duration,
             quiz.ProfessorId,
             quiz.CreatedAtUtc,
+            activeQuizLecture.CreatedAtUtc,
+            activeQuizLecture.EndTimeUtc,
             questionDtos
         );
 
-        return Result<QuizDetailDto?>.Ok(dto);
+        return Result<ActiveQuizDto?>.Ok(dto);
     }
 }

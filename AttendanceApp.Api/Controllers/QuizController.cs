@@ -14,6 +14,13 @@ using AttendanceApp.Application.Features.Quizzes.GetQuizById;
 using AttendanceApp.Application.Features.Quizzes.GetQuizInfoBatch;
 using AttendanceApp.Application.Features.Quizzes.GetQuizzesByLecture;
 using AttendanceApp.Application.Features.Quizzes.GetQuizzesByProfessor;
+using AttendanceApp.Application.Features.Quizzes.GetQuizSubmissions;
+using AttendanceApp.Application.Features.Quizzes.GetStudentQuizResults;
+using AttendanceApp.Application.Features.Quizzes.GetSubmissionCount;
+using AttendanceApp.Application.Features.Quizzes.GetUserAnswers;
+using AttendanceApp.Application.Features.Quizzes.GetUserSubmission;
+using AttendanceApp.Application.Features.Quizzes.SaveUserAnswer;
+using AttendanceApp.Application.Features.Quizzes.SubmitQuiz;
 using AttendanceApp.Application.Features.Quizzes.UpdateQuiz;
 using AttendanceApp.Application.Features.Quizzes.UpdateQuizOption;
 using AttendanceApp.Application.Features.Quizzes.UpdateQuizQuestion;
@@ -215,6 +222,88 @@ public class QuizController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetActiveQuizForLecture([FromRoute] Guid lectureId, CancellationToken cancellationToken)
     {
         var query = new GetActiveQuizForLectureQuery(lectureId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("lecture/{lectureId:guid}/student-results")]
+    public async Task<IActionResult> GetStudentQuizResults([FromRoute] Guid lectureId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var query = new GetStudentQuizResultsQuery(userId, lectureId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    #endregion
+
+    #region User Answers
+
+    [Authorize]
+    [HttpPost("answer")]
+    public async Task<IActionResult> SaveUserAnswer([FromBody] SaveUserAnswerRequest request, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var command = new SaveUserAnswerCommand(
+            userId,
+            request.QuizLectureId,
+            request.QuestionId,
+            request.OptionId,
+            request.Choice);
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpPost("quiz-lecture/{quizLectureId:guid}/submit")]
+    public async Task<IActionResult> SubmitQuiz([FromRoute] Guid quizLectureId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var command = new SubmitQuizCommand(userId, quizLectureId);
+        var result = await mediator.Send(command, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("quiz-lecture/{quizLectureId:guid}/answers")]
+    public async Task<IActionResult> GetUserAnswers([FromRoute] Guid quizLectureId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var query = new GetUserAnswersQuery(userId, quizLectureId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("quiz-lecture/{quizLectureId:guid}/submission")]
+    public async Task<IActionResult> GetUserSubmission([FromRoute] Guid quizLectureId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        var query = new GetUserSubmissionQuery(userId, quizLectureId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("quiz-lecture/{quizLectureId:guid}/submissions/count")]
+    public async Task<IActionResult> GetSubmissionCount([FromRoute] Guid quizLectureId, CancellationToken cancellationToken)
+    {
+        var query = new GetSubmissionCountQuery(quizLectureId);
+        var result = await mediator.Send(query, cancellationToken);
+        return this.ToActionResult(result);
+    }
+
+    [Authorize]
+    [HttpGet("quiz-lecture/{quizLectureId:guid}/submissions")]
+    public async Task<IActionResult> GetQuizSubmissions(
+        [FromRoute] Guid quizLectureId,
+        [FromQuery] int page = 0,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetQuizSubmissionsQuery(quizLectureId, page, pageSize, search);
         var result = await mediator.Send(query, cancellationToken);
         return this.ToActionResult(result);
     }

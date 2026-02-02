@@ -71,6 +71,8 @@ builder.Services.AddScoped<IQuizRepository, QuizRepository>();
 builder.Services.AddScoped<IQuizQuestionRepository, QuizQuestionRepository>();
 builder.Services.AddScoped<IQuizOptionRepository, QuizOptionRepository>();
 builder.Services.AddScoped<IQuizLectureRepository, QuizLectureRepository>();
+builder.Services.AddScoped<IUserAnswerRepository, UserAnswerRepository>();
+builder.Services.AddScoped<IUserSubmissionRepository, UserSubmissionRepository>();
 
 // Add JWT authentication
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "dev_only_jwt_key_at_least_32_chars_long!!";

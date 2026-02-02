@@ -19,9 +19,6 @@ document.addEventListener('DOMContentLoaded', function () {
   /** Modal close delay after success (ms) */
   const MODAL_CLOSE_DELAY_MS = 1000;
 
-  /** Attendee poll interval (ms) */
-  const ATTENDEE_POLL_INTERVAL_MS = 60000;
-
   /** Calendar registration check interval (ms) */
   const CALENDAR_CHECK_INTERVAL_MS = 50;
 
@@ -33,6 +30,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /** Attendee page size */
   const ATTENDEE_PAGE_SIZE = 20;
+
+  /** Quiz page size */
+  const QUIZ_PAGE_SIZE = 20;
+
+  /** Quiz progress update interval (ms) */
+  const QUIZ_PROGRESS_UPDATE_INTERVAL_MS = 1000;
 
   /** Search debounce delay (ms) */
   const SEARCH_DEBOUNCE_MS = 1000;
@@ -607,11 +610,11 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         }
 
-        // Refresh attendee totals
+        // Fetch attendee totals once
         try {
-          pollActiveLectureAttendeeCounts();
+          fetchActiveLectureAttendeeCounts();
         } catch {
-          // Ignore poll errors
+          // Ignore fetch errors
         }
       } catch (error) {
         console.error('[ProfessorHome] Failed to render active lecture cards:', error);
@@ -776,6 +779,26 @@ document.addEventListener('DOMContentLoaded', function () {
           <div class="pl-att-count" aria-live="polite">Attendees: —</div>
           <button type="button" class="btn-inline pl-att-btn">Attendees</button>
         </div>
+        <div class="pl-quiz-actions">
+          <button type="button" class="btn-inline pl-quiz-btn">Start Quiz</button>
+        </div>
+        <div class="pl-quiz-progress" style="display:none;">
+          <div class="pl-quiz-progress__head">
+            <div class="pl-quiz-progress__left">
+              <div class="pl-quiz-progress__title">Active Quiz</div>
+              <div class="pl-quiz-progress__name"></div>
+            </div>
+            <div class="pl-quiz-progress__remaining"></div>
+          </div>
+          <div class="pl-quiz-progress__track">
+            <div class="pl-quiz-progress__fill"></div>
+            <div class="pl-quiz-progress__now"></div>
+          </div>
+          <div class="pl-quiz-progress__submissions">
+            <span class="pl-quiz-progress__submissions-label">Submissions:</span>
+            <span class="pl-quiz-progress__submissions-count">0</span>
+          </div>
+        </div>
       `;
       activeLecturesHost.appendChild(card);
       activeLectureCardsById.set(key, card);
@@ -789,6 +812,19 @@ document.addEventListener('DOMContentLoaded', function () {
           openAttendeesPopover(key, btn);
         });
       }
+
+      // Wire quiz button
+      const quizBtn = card.querySelector('.pl-quiz-btn');
+      if (quizBtn) {
+        quizBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          openQuizSelectionModal(key);
+        });
+      }
+
+      // Fetch and display active quiz progress
+      fetchAndDisplayActiveQuiz(key, card);
     }
 
     const cached = lectureMetaById.get(key);
@@ -947,9 +983,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /**
-   * Polls attendee counts for all active lecture cards.
+   * Fetches attendee counts for all active lecture cards (called once at startup).
    */
-  async function pollActiveLectureAttendeeCounts() {
+  async function fetchActiveLectureAttendeeCounts() {
     if (!activeLecturesHost) {
       return;
     }
@@ -997,13 +1033,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       })();
     }
-  }
-
-  // Start polling
-  try {
-    setInterval(pollActiveLectureAttendeeCounts, ATTENDEE_POLL_INTERVAL_MS);
-  } catch {
-    // Ignore interval setup errors
   }
 
   // ============================================================================
@@ -1388,6 +1417,770 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ============================================================================
+  // Quiz Selection Modal
+  // ============================================================================
+
+  /** The quiz selection modal element */
+  let quizModalEl = null;
+
+  /** Current quiz modal state */
+  let quizModalState = null;
+
+  /**
+   * Fetches a page of quizzes for the current professor.
+   * @param {number} page - The page number.
+   * @param {number} pageSize - The page size.
+   * @param {string|null} searchFilter - Optional search filter.
+   * @returns {Promise<{items: Array, total: number}|null>} The page data or null.
+   */
+  async function fetchMyQuizzesPage(page, pageSize, searchFilter = null) {
+    let baseUrl = `/api/quizzes/me?page=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}`;
+
+    if (searchFilter?.trim()) {
+      baseUrl += `&name=${encodeURIComponent(searchFilter.trim())}`;
+    }
+
+    try {
+      const response = await fetch(baseUrl, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      const items = data?.items ?? data?.Items ?? data ?? [];
+      const total = data?.total ?? data?.Total ?? (Array.isArray(items) ? items.length : 0);
+
+      return {
+        items: Array.isArray(items) ? items : [],
+        total: Number(total || 0)
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Activates a quiz for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {string} quizId - The quiz ID.
+   * @returns {Promise<{success: boolean, error?: string}>} The result.
+   */
+  async function activateQuizForLecture(lectureId, quizId) {
+    try {
+      const response = await fetch('/api/quizzes/activate', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lectureId: lectureId,
+          quizId: quizId
+        })
+      });
+
+      if (!response.ok) {
+        let errorText = `Error ${response.status}`;
+
+        try {
+          const json = await response.json();
+          if (json?.detail) {
+            errorText = json.detail;
+          } else if (json?.message) {
+            errorText = json.message;
+          }
+        } catch {
+          try {
+            errorText = await response.text();
+          } catch {
+            // Use default error
+          }
+        }
+
+        return { success: false, error: errorText };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[ProfessorHome] Activate quiz error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  /**
+   * Ensures the quiz selection modal element exists.
+   * @returns {HTMLElement} The modal element.
+   */
+  function ensureQuizModal() {
+    if (quizModalEl) {
+      return quizModalEl;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'quizSelectionModal';
+    modal.className = 'att-modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+      <div class="att-modal-backdrop" data-close-quiz></div>
+      <div class="att-modal-content">
+        <div class="att-modal-header">
+          <h2 class="att-modal-title">Select Quiz</h2>
+          <button type="button" class="att-modal-close" data-close-quiz aria-label="Close">✕</button>
+        </div>
+        <div class="att-search-wrap">
+          <input type="text" class="att-search-input quiz-search-input" placeholder="Search quizzes by name..." aria-label="Search quizzes" />
+        </div>
+        <div class="quiz-feedback" aria-live="polite"></div>
+        <div class="att-sub quiz-sub" aria-live="polite"></div>
+        <div class="att-modal-body">
+          <div class="att-list quiz-list" role="list"></div>
+        </div>
+        <div class="att-modal-footer">
+          <button type="button" class="att-load-more quiz-load-more" aria-label="Load more">
+            <span class="plus-icon">+</span>
+            <span>Load more</span>
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Close button handlers
+    modal.querySelectorAll('[data-close-quiz]').forEach(function (el) {
+      el.addEventListener('click', function (event) {
+        event.preventDefault();
+        closeQuizModal();
+      });
+    });
+
+    // Clicks inside content shouldn't close
+    const content = modal.querySelector('.att-modal-content');
+    if (content) {
+      content.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+    }
+
+    // Close on escape
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && quizModalEl && quizModalEl.style.display !== 'none') {
+        closeQuizModal();
+      }
+    });
+
+    quizModalEl = modal;
+    return modal;
+  }
+
+  /**
+   * Closes the quiz selection modal.
+   */
+  function closeQuizModal() {
+    if (!quizModalEl) {
+      return;
+    }
+
+    quizModalEl.style.display = 'none';
+    quizModalEl.classList.remove('open');
+    document.body.style.overflow = '';
+    quizModalState = null;
+  }
+
+  /**
+   * Updates the quiz modal header with current counts.
+   */
+  function updateQuizModalHeader() {
+    if (!quizModalState) {
+      return;
+    }
+
+    const { subEl, loadedCount, totalKnown } = quizModalState;
+
+    if (!subEl) {
+      return;
+    }
+
+    const totalText = (typeof totalKnown === 'number' && !Number.isNaN(totalKnown))
+      ? totalKnown
+      : '—';
+
+    subEl.textContent = `Loaded ${loadedCount} / ${totalText}`;
+  }
+
+  /**
+   * Updates the visibility of the load more button for quizzes.
+   * @param {number|null} lastPageItemCount - Number of items in the last loaded page.
+   */
+  function updateQuizLoadMoreVisibility(lastPageItemCount = null) {
+    if (!quizModalState) {
+      return;
+    }
+
+    const { loadMoreBtn, loadedCount, totalKnown, pageSize } = quizModalState;
+
+    if (!loadMoreBtn) {
+      return;
+    }
+
+    const totalIsKnown = typeof totalKnown === 'number' && !Number.isNaN(totalKnown);
+    const doneByTotal = totalIsKnown && loadedCount >= totalKnown;
+    const doneByPage = typeof lastPageItemCount === 'number' && lastPageItemCount < pageSize;
+    const done = doneByTotal || doneByPage;
+
+    loadMoreBtn.style.display = done ? 'none' : 'flex';
+
+    if (done) {
+      loadMoreBtn.disabled = true;
+    }
+  }
+
+  /**
+   * Formats a duration TimeSpan for display.
+   * @param {string|null} duration - The duration string.
+   * @returns {string} The formatted duration.
+   */
+  function formatQuizDuration(duration) {
+    if (!duration) {
+      return '';
+    }
+
+    const str = String(duration).trim();
+
+    // hh:mm:ss format
+    const hhmmss = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(str);
+    if (hhmmss) {
+      const hours = Number(hhmmss[1]);
+      const mins = Number(hhmmss[2]);
+      if (hours > 0) {
+        return `${hours}h ${mins}m`;
+      }
+      return `${mins}m`;
+    }
+
+    return str;
+  }
+
+  /**
+   * Creates a quiz row element for the modal.
+   * @param {Object} quiz - The quiz data.
+   * @param {string} lectureId - The lecture ID to activate the quiz for.
+   * @returns {HTMLElement|null} The row element or null.
+   */
+  function createQuizRow(quiz, lectureId) {
+    const quizId = String(quiz?.id ?? quiz?.Id ?? '');
+
+    if (!quizId) {
+      return null;
+    }
+
+    const name = quiz?.name ?? quiz?.Name ?? 'Untitled Quiz';
+    const duration = quiz?.duration ?? quiz?.Duration;
+    const durationText = formatQuizDuration(duration);
+    const questionCount = quiz?.questionCount ?? quiz?.QuestionCount ?? quiz?.questions?.length ?? 0;
+
+    const row = document.createElement('div');
+    row.className = 'att-item quiz-item';
+    row.style.cursor = 'pointer';
+    row.innerHTML = `
+      <div class="att-left">
+        <div class="att-name">${escapeHtml(name)}</div>
+        <div class="att-email">${escapeHtml(durationText)}${durationText && questionCount ? ' • ' : ''}${questionCount ? questionCount + ' question(s)' : ''}</div>
+      </div>
+    `;
+
+    // Handle row click
+    row.addEventListener('click', async function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Prevent double-click
+      if (row.dataset.loading === 'true') {
+        return;
+      }
+      row.dataset.loading = 'true';
+      row.style.opacity = '0.6';
+
+      const feedbackEl = quizModalEl?.querySelector('.quiz-feedback');
+
+      const result = await activateQuizForLecture(lectureId, quizId);
+
+      if (result.success) {
+        if (feedbackEl) {
+          feedbackEl.textContent = 'Quiz started!';
+          feedbackEl.className = 'quiz-feedback success';
+        }
+        // Refresh the active quiz progress bar
+        refreshActiveQuizForLecture(lectureId);
+        setTimeout(closeQuizModal, MODAL_CLOSE_DELAY_MS);
+      } else {
+        if (feedbackEl) {
+          feedbackEl.textContent = result.error || 'Failed to start quiz';
+          feedbackEl.className = 'quiz-feedback error';
+        }
+        row.dataset.loading = 'false';
+        row.style.opacity = '1';
+      }
+    });
+
+    return row;
+  }
+
+  /**
+   * Loads more quizzes into the modal.
+   */
+  async function loadMoreQuizzes() {
+    if (!quizModalState || quizModalState.loading) {
+      return;
+    }
+
+    quizModalState.loading = true;
+
+    try {
+      const { lectureId, nextPage, pageSize, listEl, loadMoreBtn, searchFilter } = quizModalState;
+
+      if (!lectureId || !listEl) {
+        return;
+      }
+
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+      }
+
+      const page = await fetchMyQuizzesPage(nextPage, pageSize, searchFilter);
+
+      if (!page) {
+        return;
+      }
+
+      if (typeof page.total === 'number' && !Number.isNaN(page.total)) {
+        quizModalState.totalKnown = page.total;
+      }
+
+      const items = Array.isArray(page.items) ? page.items : [];
+
+      if (items.length === 0 && quizModalState.loadedCount === 0) {
+        if (quizModalState.subEl) {
+          quizModalState.subEl.textContent = 'No quizzes found.';
+        }
+        updateQuizLoadMoreVisibility(0);
+        return;
+      }
+
+      let added = 0;
+
+      for (const quiz of items) {
+        const row = createQuizRow(quiz, lectureId);
+
+        if (row) {
+          listEl.appendChild(row);
+          quizModalState.loadedCount++;
+          added++;
+        }
+      }
+
+      quizModalState.nextPage = nextPage + 1;
+      updateQuizModalHeader();
+      updateQuizLoadMoreVisibility(added);
+    } finally {
+      if (quizModalState) {
+        quizModalState.loading = false;
+
+        if (quizModalState.loadMoreBtn && quizModalState.loadMoreBtn.style.display !== 'none') {
+          quizModalState.loadMoreBtn.disabled = false;
+        }
+      }
+    }
+  }
+
+  /**
+   * Opens the quiz selection modal for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   */
+  function openQuizSelectionModal(lectureId) {
+    const modal = ensureQuizModal();
+    const listEl = modal.querySelector('.quiz-list');
+    const subEl = modal.querySelector('.quiz-sub');
+    const loadMoreBtn = modal.querySelector('.quiz-load-more');
+    const searchInput = modal.querySelector('.quiz-search-input');
+    const feedbackEl = modal.querySelector('.quiz-feedback');
+
+    if (listEl) {
+      listEl.innerHTML = '';
+    }
+    if (subEl) {
+      subEl.textContent = 'Loading…';
+    }
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    if (feedbackEl) {
+      feedbackEl.textContent = '';
+      feedbackEl.className = 'quiz-feedback';
+    }
+    if (loadMoreBtn) {
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.style.display = 'flex';
+      loadMoreBtn.onclick = function (event) {
+        event.preventDefault();
+        loadMoreQuizzes();
+      };
+    }
+
+    quizModalState = {
+      lectureId: String(lectureId),
+      nextPage: 0,
+      pageSize: QUIZ_PAGE_SIZE,
+      loadedCount: 0,
+      totalKnown: null,
+      loading: false,
+      listEl: listEl,
+      subEl: subEl,
+      loadMoreBtn: loadMoreBtn,
+      searchFilter: '',
+      searchDebounceTimer: null
+    };
+
+    // Setup search input with debounce
+    if (searchInput) {
+      searchInput.oninput = function (event) {
+        if (!quizModalState) {
+          return;
+        }
+
+        const value = event.target.value;
+
+        // Clear previous debounce timer
+        if (quizModalState.searchDebounceTimer) {
+          clearTimeout(quizModalState.searchDebounceTimer);
+        }
+
+        // Set new debounce timer
+        quizModalState.searchDebounceTimer = setTimeout(function () {
+          if (!quizModalState) {
+            return;
+          }
+          quizModalState.searchFilter = value;
+          quizModalState.nextPage = 0;
+          quizModalState.loadedCount = 0;
+          quizModalState.totalKnown = null;
+
+          if (listEl) {
+            listEl.innerHTML = '';
+          }
+          if (subEl) {
+            subEl.textContent = 'Searching…';
+          }
+          if (feedbackEl) {
+            feedbackEl.textContent = '';
+            feedbackEl.className = 'quiz-feedback';
+          }
+
+          loadMoreQuizzes();
+        }, SEARCH_DEBOUNCE_MS);
+      };
+    }
+
+    updateQuizModalHeader();
+
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Load first page
+    loadMoreQuizzes();
+  }
+
+  // ============================================================================
+  // Active Quiz Progress
+  // ============================================================================
+
+  /** Map of lecture ID to active quiz timer */
+  const activeQuizTimers = new Map();
+
+  /** Map of lecture ID to active quiz data */
+  const activeQuizData = new Map();
+
+  /**
+   * Fetches the active quiz for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {Promise<Object|null>} The active quiz data or null.
+   */
+  async function fetchActiveQuizForLecture(lectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/lecture/${encodeURIComponent(String(lectureId))}/active`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      return data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Parses a duration string to milliseconds.
+   * @param {string|null} duration - The duration string (hh:mm:ss or similar).
+   * @returns {number} The duration in milliseconds.
+   */
+  function parseDurationToMs(duration) {
+    if (!duration) {
+      return 0;
+    }
+
+    const str = String(duration).trim();
+
+    // hh:mm:ss format
+    const hhmmss = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(str);
+    if (hhmmss) {
+      const hours = Number(hhmmss[1]);
+      const mins = Number(hhmmss[2]);
+      const secs = Number(hhmmss[3]);
+      return (hours * 3600 + mins * 60 + secs) * 1000;
+    }
+
+    // hh:mm format
+    const hhmm = /^(\d{1,2}):(\d{2})$/.exec(str);
+    if (hhmm) {
+      const hours = Number(hhmm[1]);
+      const mins = Number(hhmm[2]);
+      return (hours * 3600 + mins * 60) * 1000;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Formats remaining time in a human-readable way.
+   * @param {number} ms - Milliseconds remaining.
+   * @returns {string} The formatted time string.
+   */
+  function formatRemainingTime(ms) {
+    if (ms <= 0) {
+      return 'Ended';
+    }
+
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${mins}m left`;
+    }
+    if (mins > 0) {
+      return `${mins}m ${secs}s left`;
+    }
+    return `${secs}s left`;
+  }
+
+  /**
+   * Updates the quiz progress bar for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {HTMLElement} card - The lecture card element.
+   */
+  function updateQuizProgress(lectureId, card) {
+    const quiz = activeQuizData.get(String(lectureId));
+    const progressEl = card.querySelector('.pl-quiz-progress');
+
+    if (!quiz || !progressEl) {
+      if (progressEl) {
+        progressEl.style.display = 'none';
+      }
+      return;
+    }
+
+    const activatedAt = quiz.activatedAtUtc ?? quiz.ActivatedAtUtc ?? quiz.activatedAt ?? quiz.ActivatedAt ?? quiz.startedAt ?? quiz.StartedAt;
+    const endTimeUtc = quiz.endTimeUtc ?? quiz.EndTimeUtc;
+    const duration = quiz.duration ?? quiz.Duration;
+    const quizName = quiz.name ?? quiz.Name ?? 'Quiz';
+
+    // We need either activatedAt + duration, or activatedAt + endTimeUtc
+    if (!activatedAt) {
+      progressEl.style.display = 'none';
+      return;
+    }
+
+    const startTime = new Date(activatedAt);
+    let endTime;
+    let totalMs;
+
+    if (endTimeUtc) {
+      // Use endTimeUtc directly if available
+      endTime = new Date(endTimeUtc);
+      totalMs = Math.max(1, endTime.getTime() - startTime.getTime());
+    } else if (duration) {
+      // Calculate from duration
+      const durationMs = parseDurationToMs(duration);
+      totalMs = Math.max(1, durationMs);
+      endTime = new Date(startTime.getTime() + totalMs);
+    } else {
+      progressEl.style.display = 'none';
+      return;
+    }
+
+    const now = new Date();
+    const elapsedMs = now.getTime() - startTime.getTime();
+    const remainingMs = endTime.getTime() - now.getTime();
+
+    // If quiz has ended, hide progress and clear timer
+    if (remainingMs <= 0) {
+      progressEl.style.display = 'none';
+      clearQuizTimer(lectureId);
+      activeQuizData.delete(String(lectureId));
+      return;
+    }
+
+    // Show progress
+    progressEl.style.display = 'block';
+
+    const nameEl = progressEl.querySelector('.pl-quiz-progress__name');
+    const remainingEl = progressEl.querySelector('.pl-quiz-progress__remaining');
+    const fillEl = progressEl.querySelector('.pl-quiz-progress__fill');
+    const nowEl = progressEl.querySelector('.pl-quiz-progress__now');
+    const submissionsCountEl = progressEl.querySelector('.pl-quiz-progress__submissions-count');
+
+    if (nameEl) {
+      nameEl.textContent = quizName;
+    }
+
+    if (remainingEl) {
+      remainingEl.textContent = formatRemainingTime(remainingMs);
+    }
+
+    if (submissionsCountEl) {
+      submissionsCountEl.textContent = String(quiz.submissionCount ?? 0);
+    }
+
+    const clampedMs = Math.max(0, Math.min(totalMs, elapsedMs));
+    const progressPercent = Math.max(0, Math.min(100, (clampedMs / totalMs) * 100));
+
+    if (fillEl) {
+      fillEl.style.width = `${progressPercent}%`;
+    }
+
+    if (nowEl) {
+      nowEl.style.left = `${progressPercent}%`;
+    }
+  }
+
+  /**
+   * Clears the quiz progress timer for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   */
+  function clearQuizTimer(lectureId) {
+    const key = String(lectureId);
+    const timer = activeQuizTimers.get(key);
+    if (timer) {
+      clearInterval(timer);
+      activeQuizTimers.delete(key);
+    }
+  }
+
+  /**
+   * Fetches and displays the active quiz progress for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @param {HTMLElement} card - The lecture card element.
+   */
+  async function fetchAndDisplayActiveQuiz(lectureId, card) {
+    const key = String(lectureId);
+
+    try {
+      const quiz = await fetchActiveQuizForLecture(lectureId);
+
+      if (!quiz) {
+        // No active quiz
+        activeQuizData.delete(key);
+        clearQuizTimer(key);
+        const progressEl = card.querySelector('.pl-quiz-progress');
+        if (progressEl) {
+          progressEl.style.display = 'none';
+        }
+        return;
+      }
+
+      // Fetch submission count
+      const quizLectureId = quiz.quizLectureId ?? quiz.QuizLectureId;
+      if (quizLectureId) {
+        try {
+          const count = await fetchSubmissionCount(quizLectureId);
+          quiz.submissionCount = count;
+        } catch {
+          quiz.submissionCount = 0;
+        }
+      }
+
+      // Store quiz data
+      activeQuizData.set(key, quiz);
+
+      // Initial render
+      updateQuizProgress(lectureId, card);
+
+      // Clear existing timer if any
+      clearQuizTimer(key);
+
+      // Start update timer
+      const timer = setInterval(function () {
+        // Check if card still exists
+        if (!activeLectureCardsById.has(key)) {
+          clearQuizTimer(key);
+          return;
+        }
+        updateQuizProgress(lectureId, card);
+      }, QUIZ_PROGRESS_UPDATE_INTERVAL_MS);
+
+      activeQuizTimers.set(key, timer);
+    } catch (error) {
+      console.error('[ProfessorHome] Failed to fetch active quiz:', error);
+    }
+  }
+
+  /**
+   * Fetches the submission count for a quiz lecture.
+   * @param {string} quizLectureId - The quiz lecture ID.
+   * @returns {Promise<number>} The submission count.
+   */
+  async function fetchSubmissionCount(quizLectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/quiz-lecture/${encodeURIComponent(String(quizLectureId))}/submissions/count`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        return 0;
+      }
+
+      const count = await response.json();
+      return typeof count === 'number' ? count : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Refreshes the active quiz display after starting a new quiz.
+   * @param {string} lectureId - The lecture ID.
+   */
+  function refreshActiveQuizForLecture(lectureId) {
+    const key = String(lectureId);
+    const card = activeLectureCardsById.get(key);
+    if (card) {
+      fetchAndDisplayActiveQuiz(lectureId, card);
+    }
+  }
+
+  // ============================================================================
   // Calendar Status Pill Updates
   // ============================================================================
 
@@ -1569,6 +2362,10 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="lp-desc small" style="flex:1"></div>
           </div>
           <div class="lp-status small mt-1"></div>
+          <div class="lp-quizzes mt-2">
+            <div class="lp-quizzes__label small text-muted">Quizzes:</div>
+            <div class="lp-quizzes__list"></div>
+          </div>
           <div class="lp-actions mt-2"></div>
         </div>
       `;
@@ -1633,6 +2430,115 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /**
+   * Fetches quizzes for a lecture.
+   * @param {string} lectureId - The lecture ID.
+   * @returns {Promise<Array>} The quizzes.
+   */
+  async function fetchQuizzesForLecture(lectureId) {
+    try {
+      const response = await fetch(`/api/quizzes/lecture/${lectureId}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) {
+        return [];
+      }
+      return await response.json();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetches quiz info by ID.
+   * @param {string} quizId - The quiz ID.
+   * @returns {Promise<Object|null>} The quiz info.
+   */
+  async function fetchQuizInfo(quizId) {
+    try {
+      const response = await fetch(`/api/quizzes/${quizId}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) {
+        return null;
+      }
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Loads and displays quizzes in the lecture popup.
+   * @param {string} lectureId - The lecture ID.
+   * @param {HTMLElement} popup - The popup element.
+   */
+  async function loadQuizzesInPopup(lectureId, popup) {
+    const quizzesSection = popup.querySelector('.lp-quizzes');
+    const quizzesList = popup.querySelector('.lp-quizzes__list');
+
+    if (!quizzesSection || !quizzesList) {
+      return;
+    }
+
+    quizzesList.innerHTML = '<span class="small text-muted">Loading...</span>';
+    quizzesSection.style.display = 'block';
+
+    try {
+      const quizLectures = await fetchQuizzesForLecture(lectureId);
+
+      if (!quizLectures || quizLectures.length === 0) {
+        quizzesSection.style.display = 'none';
+        return;
+      }
+
+      // Fetch quiz info for each quiz lecture
+      const quizInfoPromises = quizLectures.map(async (ql) => {
+        const quizId = ql.quizId ?? ql.QuizId;
+        const quizInfo = await fetchQuizInfo(quizId);
+        return {
+          quizLectureId: ql.id ?? ql.Id,
+          quizId: quizId,
+          name: quizInfo?.name ?? quizInfo?.Name ?? 'Quiz',
+          createdAtUtc: ql.createdAtUtc ?? ql.CreatedAtUtc
+        };
+      });
+
+      const quizzes = await Promise.all(quizInfoPromises);
+
+      quizzesList.innerHTML = '';
+
+      quizzes.forEach(function (quiz) {
+        const quizItem = document.createElement('div');
+        quizItem.className = 'lp-quiz-item';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'lp-quiz-item__name';
+        nameSpan.textContent = quiz.name;
+
+        const viewBtn = document.createElement('button');
+        viewBtn.type = 'button';
+        viewBtn.className = 'btn-inline btn-sm';
+        viewBtn.textContent = 'Results';
+        viewBtn.addEventListener('click', function () {
+          popup.style.display = 'none';
+          openQuizResultsModal(quiz.quizLectureId, quiz.name);
+        });
+
+        quizItem.appendChild(nameSpan);
+        quizItem.appendChild(viewBtn);
+        quizzesList.appendChild(quizItem);
+      });
+    } catch (error) {
+      console.error('[ProfessorHome] Failed to load quizzes:', error);
+      quizzesSection.style.display = 'none';
+    }
+  }
+
+  /**
    * Handles calendar event clicks to show the lecture popup.
    * @param {Object} ev - The event object.
    */
@@ -1690,11 +2596,265 @@ document.addEventListener('DOMContentLoaded', function () {
         }));
       }
 
+      // Load quizzes for this lecture
+      loadQuizzesInPopup(id, popup);
+
       positionLecturePopup(popup, eventEl);
     } catch (error) {
       console.error('[ProfessorHome] Calendar event click error:', error);
     }
   };
+
+  // ============================================================================
+  // Quiz Results Modal
+  // ============================================================================
+
+  /** Current quiz results modal state */
+  let quizResultsModalState = {
+    quizLectureId: null,
+    quizName: '',
+    page: 0,
+    pageSize: 20,
+    search: '',
+    totalCount: 0
+  };
+
+  /**
+   * Creates the quiz results modal if it doesn't exist.
+   * @returns {HTMLElement} The modal element.
+   */
+  function ensureQuizResultsModal() {
+    let modal = document.getElementById('quizResultsModal');
+
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'quizResultsModal';
+      modal.className = 'quiz-results-modal';
+      modal.innerHTML = `
+        <div class="qr-backdrop" data-close-qr-modal></div>
+        <div class="qr-dialog">
+          <div class="qr-header">
+            <h3 class="qr-title">Quiz Results</h3>
+            <button type="button" class="qr-close" data-close-qr-modal aria-label="Close">×</button>
+          </div>
+          <div class="qr-search">
+            <input type="text" class="qr-search__input" placeholder="Search by name or email..." />
+          </div>
+          <div class="qr-body">
+            <div class="qr-loading">Loading...</div>
+            <table class="qr-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Score</th>
+                  <th>Submitted</th>
+                </tr>
+              </thead>
+              <tbody class="qr-table__body"></tbody>
+            </table>
+            <div class="qr-empty" style="display:none;">No submissions found.</div>
+          </div>
+          <div class="qr-footer">
+            <div class="qr-pagination">
+              <button type="button" class="qr-pagination__prev btn-inline" disabled>Previous</button>
+              <span class="qr-pagination__info">Page 1</span>
+              <button type="button" class="qr-pagination__next btn-inline">Next</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      // Close handlers
+      modal.querySelectorAll('[data-close-qr-modal]').forEach(function (el) {
+        el.addEventListener('click', function (event) {
+          event.stopPropagation();
+          closeQuizResultsModal();
+        });
+      });
+
+      // Search input handler
+      const searchInput = modal.querySelector('.qr-search__input');
+      let searchTimeout = null;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function () {
+          quizResultsModalState.search = searchInput.value.trim();
+          quizResultsModalState.page = 0;
+          loadQuizResultsPage();
+        }, 300);
+      });
+
+      // Pagination handlers
+      const prevBtn = modal.querySelector('.qr-pagination__prev');
+      const nextBtn = modal.querySelector('.qr-pagination__next');
+
+      prevBtn.addEventListener('click', function () {
+        if (quizResultsModalState.page > 0) {
+          quizResultsModalState.page--;
+          loadQuizResultsPage();
+        }
+      });
+
+      nextBtn.addEventListener('click', function () {
+        const maxPage = Math.ceil(quizResultsModalState.totalCount / quizResultsModalState.pageSize) - 1;
+        if (quizResultsModalState.page < maxPage) {
+          quizResultsModalState.page++;
+          loadQuizResultsPage();
+        }
+      });
+
+      // Stop clicks inside dialog from bubbling
+      modal.querySelector('.qr-dialog').addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+    }
+
+    return modal;
+  }
+
+  /**
+   * Opens the quiz results modal.
+   * @param {string} quizLectureId - The quiz lecture ID.
+   * @param {string} quizName - The quiz name.
+   */
+  function openQuizResultsModal(quizLectureId, quizName) {
+    const modal = ensureQuizResultsModal();
+
+    quizResultsModalState = {
+      quizLectureId: quizLectureId,
+      quizName: quizName,
+      page: 0,
+      pageSize: 20,
+      search: '',
+      totalCount: 0
+    };
+
+    const titleEl = modal.querySelector('.qr-title');
+    titleEl.textContent = `Results: ${quizName}`;
+
+    const searchInput = modal.querySelector('.qr-search__input');
+    searchInput.value = '';
+
+    modal.classList.add('open');
+    loadQuizResultsPage();
+  }
+
+  /**
+   * Closes the quiz results modal.
+   */
+  function closeQuizResultsModal() {
+    const modal = document.getElementById('quizResultsModal');
+    if (modal) {
+      modal.classList.remove('open');
+    }
+  }
+
+  /**
+   * Fetches quiz submissions from the API.
+   * @returns {Promise<Object>} The submissions data.
+   */
+  async function fetchQuizSubmissions() {
+    const { quizLectureId, page, pageSize, search } = quizResultsModalState;
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize)
+    });
+    if (search) {
+      params.set('search', search);
+    }
+
+    try {
+      const response = await fetch(`/api/quizzes/quiz-lecture/${quizLectureId}/submissions?${params}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) {
+        return { submissions: [], totalCount: 0 };
+      }
+      return await response.json();
+    } catch {
+      return { submissions: [], totalCount: 0 };
+    }
+  }
+
+  /**
+   * Loads and displays the current page of quiz results.
+   */
+  async function loadQuizResultsPage() {
+    const modal = document.getElementById('quizResultsModal');
+    if (!modal) return;
+
+    const loadingEl = modal.querySelector('.qr-loading');
+    const tableEl = modal.querySelector('.qr-table');
+    const tbodyEl = modal.querySelector('.qr-table__body');
+    const emptyEl = modal.querySelector('.qr-empty');
+    const prevBtn = modal.querySelector('.qr-pagination__prev');
+    const nextBtn = modal.querySelector('.qr-pagination__next');
+    const pageInfo = modal.querySelector('.qr-pagination__info');
+
+    loadingEl.style.display = 'block';
+    tableEl.style.display = 'none';
+    emptyEl.style.display = 'none';
+
+    try {
+      const data = await fetchQuizSubmissions();
+      const submissions = data.submissions ?? data.Submissions ?? [];
+      const totalCount = data.totalCount ?? data.TotalCount ?? 0;
+
+      quizResultsModalState.totalCount = totalCount;
+
+      loadingEl.style.display = 'none';
+
+      if (submissions.length === 0) {
+        emptyEl.style.display = 'block';
+        tableEl.style.display = 'none';
+      } else {
+        emptyEl.style.display = 'none';
+        tableEl.style.display = 'table';
+
+        tbodyEl.innerHTML = '';
+        submissions.forEach(function (sub) {
+          const tr = document.createElement('tr');
+
+          const nameTd = document.createElement('td');
+          nameTd.textContent = sub.userName ?? sub.UserName ?? 'Unknown';
+
+          const emailTd = document.createElement('td');
+          emailTd.textContent = sub.userEmail ?? sub.UserEmail ?? '';
+
+          const scoreTd = document.createElement('td');
+          const score = sub.score ?? sub.Score ?? 0;
+          const maxScore = sub.maxScore ?? sub.MaxScore ?? 0;
+          scoreTd.textContent = `${score} / ${maxScore}`;
+
+          const timeTd = document.createElement('td');
+          const submittedAt = sub.submittedAtUtc ?? sub.SubmittedAtUtc;
+          timeTd.textContent = submittedAt ? new Date(submittedAt).toLocaleString() : '-';
+
+          tr.appendChild(nameTd);
+          tr.appendChild(emailTd);
+          tr.appendChild(scoreTd);
+          tr.appendChild(timeTd);
+          tbodyEl.appendChild(tr);
+        });
+      }
+
+      // Update pagination
+      const maxPage = Math.max(0, Math.ceil(totalCount / quizResultsModalState.pageSize) - 1);
+      prevBtn.disabled = quizResultsModalState.page <= 0;
+      nextBtn.disabled = quizResultsModalState.page >= maxPage;
+      pageInfo.textContent = `Page ${quizResultsModalState.page + 1} of ${maxPage + 1}`;
+
+    } catch (error) {
+      console.error('[ProfessorHome] Failed to load quiz results:', error);
+      loadingEl.style.display = 'none';
+      emptyEl.textContent = 'Failed to load results.';
+      emptyEl.style.display = 'block';
+    }
+  }
 
   // ============================================================================
   // Lecture Status Change

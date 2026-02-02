@@ -37,12 +37,30 @@ public class ActivateQuizForLectureCommandHandler(
             throw new ValidationException("Can only activate quizzes for in progress lectures.");
         }
 
-        var quiz = await quizRepo.GetByIdAsync(command.QuizId, cancellationToken)
+        var quiz = await quizRepo.GetByIdWithQuestionsAndOptionsAsync(command.QuizId, cancellationToken)
             ?? throw new KeyNotFoundException($"No quiz with id {command.QuizId} found.");
 
         if (quiz.ProfessorId != command.ProfessorId)
         {
             throw new ValidationException("You can only activate your own quizzes.");
+        }
+
+        if (quiz.Questions.Count == 0)
+        {
+            throw new ValidationException("Cannot activate a quiz with no questions.");
+        }
+
+        foreach (var question in quiz.Questions)
+        {
+            if (question.Options.Count <= 1)
+            {
+                throw new ValidationException($"Question '{question.Text}' must have at least 2 options.");
+            }
+
+            if (!question.Options.Any(o => o.IsCorrect))
+            {
+                throw new ValidationException($"Question '{question.Text}' must have at least one correct option.");
+            }
         }
 
         var now = DateTime.UtcNow;
