@@ -2,7 +2,7 @@ using AttendanceApp.Application.Features.Lectures.CreateLecture;
 
 namespace AttendanceApp.Api.Common.Requests.Lectures;
 
-public static class CerateLectureRequestToCommand
+public static class CreateLectureRequestToCommand
 {
     public static CreateLectureCommand ToCommand(Guid professorId, CreateLectureRequest request)
     {

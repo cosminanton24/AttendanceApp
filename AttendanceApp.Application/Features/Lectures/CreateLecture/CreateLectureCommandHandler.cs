@@ -4,6 +4,7 @@ using AttendanceApp.Domain.Lectures;
 using MediatR;
 using AttendanceApp.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
+using AttendanceApp.Domain.Common;
 
 namespace AttendanceApp.Application.Features.Lectures.CreateLecture;
 

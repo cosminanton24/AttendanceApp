@@ -21,14 +21,14 @@ public class GetActiveQuizForLectureQueryHandler(
 
         if (activeQuizLecture is null)
         {
-            return Result<ActiveQuizDto?>.Ok(null);
+            return Result<ActiveQuizDto?>.OkNullable(null);
         }
 
         var quiz = await quizRepo.GetByIdWithQuestionsAndOptionsAsync(activeQuizLecture.QuizId, cancellationToken);
 
         if (quiz is null)
         {
-            return Result<ActiveQuizDto?>.Ok(null);
+            return Result<ActiveQuizDto?>.OkNullable(null);
         }
 
         var questionDtos = quiz.Questions.Select(q => new QuizQuestionDto(

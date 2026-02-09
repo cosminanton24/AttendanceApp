@@ -2880,8 +2880,51 @@ document.addEventListener('DOMContentLoaded', function () {
       ? (popup.querySelector('.lp-actions') || popup)
       : popupOrFeedback;
 
+    async function getProfessorLocation() {
+      return new Promise(function (resolve, reject) {
+        if (!navigator.geolocation) {
+          reject(new Error('No geolocation support'));
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 0
+        });
+      });
+    }
+
+    async function getProfessorLocationConcat() {
+      const pos = await getProfessorLocation();
+      const coords = pos?.coords;
+      const latitude = coords?.latitude;
+      const longitude = coords?.longitude;
+      const accuracy = coords?.accuracy;
+      return `${latitude},${longitude},${accuracy}`;
+    }
+
     try {
-      const response = await fetch(`/api/lectures/status/${lectureId}`, {
+      let posQuery = '';
+      if (statusValue === LectureStatus.IN_PROGRESS) {
+        try {
+          const concat = await getProfessorLocationConcat();
+          posQuery = `?pos=${encodeURIComponent(concat)}`;
+        } catch {
+          try {
+            if (feedbackEl && typeof feedbackEl.textContent !== 'undefined') {
+              feedbackEl.textContent = 'Geolocation enabled is required.';
+            }
+          } catch {
+            // Ignore feedback update errors
+          }
+          return;
+        }
+      }
+
+      const url = `/api/lectures/status/${encodeURIComponent(String(lectureId))}${posQuery}`;
+
+      const response = await fetch(url, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },

@@ -35,7 +35,8 @@
     DONE: 'Done.',
     JOINED: 'Joined',
     NETWORK_ERROR: 'Network error while joining.',
-    SUCCESS: 'You joined the lecture.'
+    SUCCESS: 'You joined the lecture.',
+    GEOLOCATION_REQUIRED: 'Geolocation enabled is required.'
   });
 
   // ============================================================================
@@ -227,11 +228,11 @@
    * @param {string} lectureId - The lecture ID.
    * @returns {Object} Object containing primary and fallback URLs.
    */
-  function buildJoinUrls(lectureId) {
+  function buildJoinUrls(lectureId, position) {
     const encodedId = encodeURIComponent(lectureId);
+    const pos = typeof position === 'string' && position ? `?pos=${encodeURIComponent(position)}` : '';
     return {
-      primary: `/api/lectures/join/${encodedId}`,
-      fallback: `/api/lecture/join/${encodedId}`
+      primary: `/api/lectures/join/${encodedId}${pos}`
     };
   }
 
@@ -312,7 +313,7 @@
     ui.setProgress(10);
 
     // Build API URLs
-    const urls = buildJoinUrls(lectureId);
+    const urls = buildJoinUrls(lectureId, elements.studentLocationConcat);
 
     // Attempt to join
     let response;
@@ -339,6 +340,17 @@
     handleJoinSuccess(ui);
   }
 
+  async function getStudentLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("No geolocation support"));
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 0
+      });
+    });
+  }
+
   // ============================================================================
   // Initialization
   // ============================================================================
@@ -346,10 +358,23 @@
   /**
    * Initializes the lecture join page.
    */
-  function init() {
+  async function init() {
     const elements = getDomElements();
-
     if (!elements) {
+      return;
+    }
+
+    const ui = createUiUpdater(elements);
+
+    try {
+      const pos = await getStudentLocation();
+      const { latitude, longitude, accuracy } = pos.coords;
+      elements.studentLocation = { latitude, longitude, accuracy };
+      elements.studentLocationConcat = `${latitude},${longitude},${accuracy}`;
+    } catch {
+      ui.stopLoading();
+      ui.setStatusText(Messages.FAILED);
+      ui.setResult(Messages.GEOLOCATION_REQUIRED, ResultType.ERROR);
       return;
     }
 

@@ -14,6 +14,8 @@ public class Lecture : AggregateRoot<Guid>
     public string Description { get; private set; } = default!;
     public DateTime StartTime { get; }
     public TimeSpan Duration { get; }
+    public Location? Location { get; private set; }
+
     [NotMapped]
     public DateTime EndTime => StartTime.Add(Duration);
 
@@ -35,14 +37,18 @@ public class Lecture : AggregateRoot<Guid>
         Name = name;
         Description = description;
         Status = LectureStatus.Scheduled;
+        Location = null;
     }
 
-    public void Start()
+    public void Start(Location location)
     {
-        if (Status != LectureStatus.Scheduled)
-            throw new DomainException("Lecture can only be started when scheduled.");
+        Guard.NotNull(location, nameof(location));
+
+         if (Status != LectureStatus.Scheduled)
+            throw new DomainException($"Lecture {Status} can only be started when scheduled.");
 
         Status = LectureStatus.InProgress;
+        Location = location;
     }
 
     public void End()
@@ -51,19 +57,6 @@ public class Lecture : AggregateRoot<Guid>
             throw new DomainException("Lecture can only be ended when in progress.");
 
         Status = LectureStatus.Ended;
-    }
-
-    public void AddAttendee(Guid userId)
-    {
-        Guard.NotEmpty(userId, nameof(userId));
-
-        if (Status != LectureStatus.InProgress)
-            throw new DomainException("Cannot add attendees unless lecture is in progress.");
-
-        if (_attendees.Any(a => a.UserId == userId))
-            return;
-
-        _attendees.Add(new LectureAttendee(Id, userId));
     }
 
     public void ChangeStatus(LectureStatus status)

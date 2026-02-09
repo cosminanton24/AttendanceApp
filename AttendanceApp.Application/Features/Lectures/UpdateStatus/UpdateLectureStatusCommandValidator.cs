@@ -1,3 +1,4 @@
+using AttendanceApp.Domain.Enums;
 using FluentValidation;
 
 namespace AttendanceApp.Application.Features.Lectures.UpdateStatus;
@@ -17,5 +18,10 @@ public sealed class UpdateLectureStatusCommandValidator : AbstractValidator<Upda
         RuleFor(x => x.Status)
             .IsInEnum()
             .WithMessage("Invalid lecture status.");
+
+        RuleFor(x => x.Position)
+            .NotEmpty()
+            .When(x => x.Status == LectureStatus.InProgress)
+            .WithMessage("Position is required when starting a lecture.");
     }
 }

@@ -1,4 +1,5 @@
 using AttendanceApp.Domain.Lectures;
+using AttendanceApp.Infrastructure.Persistence.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -36,5 +37,10 @@ public sealed class LectureConfiguration : IEntityTypeConfiguration<Lecture>
 
         builder.Navigation(x => x.Attendees)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Property(x => x.Location)
+            .HasConversion(new LocationConverter())
+            .HasMaxLength(256)
+            .IsRequired(false);
     }
 }

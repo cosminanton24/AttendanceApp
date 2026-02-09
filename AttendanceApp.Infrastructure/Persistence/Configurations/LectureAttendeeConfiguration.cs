@@ -1,5 +1,6 @@
 using AttendanceApp.Domain.Lectures;
 using AttendanceApp.Domain.Users;
+using AttendanceApp.Infrastructure.Persistence.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -30,5 +31,10 @@ public sealed class LectureAttendeeConfiguration : IEntityTypeConfiguration<Lect
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.UserId);
+
+        builder.Property(x => x.LocationAtJoin)
+            .HasConversion(new LocationConverter())
+            .HasMaxLength(256)
+            .IsRequired(true);
     }
 }

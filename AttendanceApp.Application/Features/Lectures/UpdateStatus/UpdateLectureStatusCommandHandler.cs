@@ -4,6 +4,7 @@ using MediatR;
 using AttendanceApp.Application.Features.Lectures.Dtos;
 using AttendanceApp.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
+using AttendanceApp.Domain.Common;
 
 namespace AttendanceApp.Application.Features.Lectures.UpdateStatus;
 
@@ -44,8 +45,21 @@ public class UpdateLectureStatusCommandHandler(ILectureRepository _lectureRepo, 
             throw new ValidationException("Only scheduled lectures can be canceled.");
         }
 
-        lecture.ChangeStatus(command.Status);
+        
+        if(command.Status == LectureStatus.InProgress)
+        {
+            lecture.Start(Location.FromString(command.Position!));
+        }
+        else if(command.Status == LectureStatus.Ended)
+        {
+            lecture.End();
+        }
+        else
+        {
+            lecture.ChangeStatus(command.Status);
+        }
         await _lectureRepo.SaveChangesAsync(cancellationToken);
+
         var lectureDto = new LectureDto
         (
             lecture.Id,

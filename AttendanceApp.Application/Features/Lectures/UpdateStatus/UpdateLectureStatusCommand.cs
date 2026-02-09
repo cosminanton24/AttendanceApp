@@ -5,4 +5,4 @@ using MediatR;
 
 namespace AttendanceApp.Application.Features.Lectures.UpdateStatus;
 
-public record UpdateLectureStatusCommand(Guid UserId, Guid LectureId, LectureStatus Status) : IRequest<Result<LectureDto>>;
+public record UpdateLectureStatusCommand(Guid UserId, Guid LectureId, LectureStatus Status, string? Position) : IRequest<Result<LectureDto>>;

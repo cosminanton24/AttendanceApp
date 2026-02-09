@@ -20,11 +20,13 @@ public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepos
 
         if (!string.IsNullOrWhiteSpace(searchFilter))
         {
-            var filter = searchFilter.Trim().ToLower();
+            var pattern = $"%{searchFilter.Trim()}%";
+
             query = query.Where(a => 
                 _context.Users.Any(u => 
                     u.Id == a.UserId && 
-                    (u.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || u.Email.Contains(filter, StringComparison.CurrentCultureIgnoreCase))));
+                    (EF.Functions.ILike(u.Name, pattern) ||
+                    EF.Functions.ILike(u.Email, pattern))));
         }
 
         return await query.CountAsync(cancellationToken);
@@ -44,11 +46,13 @@ public class LectureAttendeeRepository(AttendanceAppDbContext db) : GenericRepos
 
         if (!string.IsNullOrWhiteSpace(searchFilter))
         {
-            var filter = searchFilter.Trim().ToLower();
+            var pattern = $"%{searchFilter.Trim()}%";
+
             query = query.Where(a => 
                 _context.Users.Any(u => 
                     u.Id == a.UserId && 
-                    (u.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || u.Email.Contains(filter, StringComparison.CurrentCultureIgnoreCase))));
+                    (EF.Functions.ILike(u.Name, pattern) ||
+                    EF.Functions.ILike(u.Email, pattern))));
         }
 
         return await query

@@ -3,4 +3,4 @@ using MediatR;
 
 namespace AttendanceApp.Application.Features.Users.JoinLecture;
 
-public record JoinLectureCommand(Guid UserId, Guid LectureId) : IRequest<Result>;
+public record JoinLectureCommand(Guid UserId, Guid LectureId,string Position) : IRequest<Result>;

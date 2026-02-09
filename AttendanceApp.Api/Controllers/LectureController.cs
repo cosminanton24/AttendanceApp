@@ -21,7 +21,7 @@ public class LectureController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> CreateLecture([FromBody] CreateLectureRequest request, CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
-        var command = CerateLectureRequestToCommand.ToCommand(userId, request);
+        var command = CreateLectureRequestToCommand.ToCommand(userId, request);
         var result = await mediator.Send(command, cancellationToken);
 
         return this.ToActionResult(result);
@@ -57,10 +57,11 @@ public class LectureController(IMediator mediator) : ControllerBase
 
     [Authorize]
     [HttpPost("join/{lectureId:guid}")]
-    public async Task<IActionResult> JoinLecture([FromRoute] Guid lectureId, CancellationToken cancellationToken)
+    public async Task<IActionResult> JoinLecture([FromRoute] Guid lectureId, [FromQuery] string pos, CancellationToken cancellationToken)
     {
+        Console.WriteLine($"JoinLecture called with lectureId: {lectureId}, position: {pos}");
         var userId = User.GetUserId();
-        var command = new JoinLectureCommand(userId, lectureId);
+        var command = new JoinLectureCommand(userId, lectureId, pos);
         var result = await mediator.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }
@@ -83,10 +84,14 @@ public class LectureController(IMediator mediator) : ControllerBase
 
     [Authorize]
     [HttpPut("status/{lectureId:guid}")]
-    public async Task<IActionResult> UpdateLectureStatus([FromRoute] Guid lectureId, [FromBody] UpdateLectureStatusRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateLectureStatus(
+        [FromRoute] Guid lectureId, 
+        [FromBody] UpdateLectureStatusRequest request, 
+        [FromQuery] string? pos,
+        CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
-        var command = UpdateLectureStatusRequestToCommand.ToCommand(userId, lectureId, request);
+        var command = UpdateLectureStatusRequestToCommand.ToCommand(userId, lectureId, request, pos);
         var result = await mediator.Send(command, cancellationToken);
         return this.ToActionResult(result);
     }

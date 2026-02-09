@@ -1,6 +1,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using AttendanceApp.Application.Common.Results;
+using AttendanceApp.Domain.Common;
 using AttendanceApp.Domain.Enums;
 using AttendanceApp.Domain.Lectures;
 using AttendanceApp.Domain.Repositories;
@@ -36,10 +37,18 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
         if(user.Type != UserType.Student)
             throw new ValidationException($"You can only join lectures as a student");
 
+        var distance = lecture.Location!.Value.DistanceTo(Location.FromString(command.Position));
+        Console.WriteLine($"JOIN LECTURE Distance to lecture: {distance} meters.");
+        if (distance > 100)
+        {
+            throw new ValidationException($"You are too far away from the lecture location to join. Distance: {distance} meters.");
+        }
+
         var newLecture = new LectureAttendee
         (
             lecture.Id,
-            user.Id
+            user.Id,
+            Location.FromString(command.Position)
         );
 
         await _lectureAttendeeRepository.AddAsync(newLecture, cancellationToken);
