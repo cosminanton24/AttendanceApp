@@ -7,12 +7,13 @@ public class LectureAttendeeTests
 {
     private readonly Guid _lectureId = Guid.NewGuid();
     private readonly Guid _userId = Guid.NewGuid();
+    private readonly Location _location = new(40.7128, -74.006, 10);
 
     [Fact]
     public void Constructor_WithValidData_CreatesLectureAttendee()
     {
         // Act
-        var attendee = new LectureAttendee(_lectureId, _userId);
+        var attendee = new LectureAttendee(_lectureId, _userId, _location);
 
         // Assert
         Assert.NotNull(attendee);
@@ -25,7 +26,7 @@ public class LectureAttendeeTests
     public void Constructor_WithEmptyLectureId_ThrowsDomainException()
     {
         // Act & Assert
-        var ex = Assert.Throws<DomainException>(() => new LectureAttendee(Guid.Empty, _userId));
+        var ex = Assert.Throws<DomainException>(() => new LectureAttendee(Guid.Empty, _userId, _location));
         Assert.Equal("lectureId is required.", ex.Message);
     }
 
@@ -33,7 +34,7 @@ public class LectureAttendeeTests
     public void Constructor_WithEmptyUserId_ThrowsDomainException()
     {
         // Act & Assert
-        var ex = Assert.Throws<DomainException>(() => new LectureAttendee(_lectureId, Guid.Empty));
+        var ex = Assert.Throws<DomainException>(() => new LectureAttendee(_lectureId, Guid.Empty, _location));
         Assert.Equal("userId is required.", ex.Message);
     }
 
@@ -44,7 +45,7 @@ public class LectureAttendeeTests
         var beforeCreation = DateTime.UtcNow;
 
         // Act
-        var attendee = new LectureAttendee(_lectureId, _userId);
+        var attendee = new LectureAttendee(_lectureId, _userId, _location);
         var afterCreation = DateTime.UtcNow;
 
         // Assert
@@ -55,8 +56,8 @@ public class LectureAttendeeTests
     public void Equals_WithSameAttendeeId_ReturnsTrue()
     {
         // Arrange
-        var attendee1 = new LectureAttendee(_lectureId, _userId);
-        var attendee2 = new LectureAttendee(Guid.NewGuid(), Guid.NewGuid());
+        var attendee1 = new LectureAttendee(_lectureId, _userId, _location);
+        var attendee2 = new LectureAttendee(Guid.NewGuid(), Guid.NewGuid(), _location);
         
         // Manually set the same ID for equality test
         var idProperty = typeof(LectureAttendee).GetProperty("Id");
@@ -70,7 +71,7 @@ public class LectureAttendeeTests
     public void Equals_SameInstancesAreEqual()
     {
         // Arrange
-        var attendee = new LectureAttendee(_lectureId, _userId);
+        var attendee = new LectureAttendee(_lectureId, _userId, _location);
 
         // Act & Assert
         Assert.Equal(attendee, attendee);
@@ -80,8 +81,8 @@ public class LectureAttendeeTests
     public void GetHashCode_WithSameAttendeeId_ReturnsSameHashCode()
     {
         // Arrange
-        var attendee1 = new LectureAttendee(_lectureId, _userId);
-        var attendee2 = new LectureAttendee(Guid.NewGuid(), Guid.NewGuid());
+        var attendee1 = new LectureAttendee(_lectureId, _userId, _location);
+        var attendee2 = new LectureAttendee(Guid.NewGuid(), Guid.NewGuid(), _location);
         
         // Manually set the same ID
         var idProperty = typeof(LectureAttendee).GetProperty("Id");
@@ -95,9 +96,9 @@ public class LectureAttendeeTests
     public void Constructor_MultipleAttendees_CreatedSuccessfully()
     {
         // Act
-        var attendee1 = new LectureAttendee(_lectureId, _userId);
-        var attendee2 = new LectureAttendee(_lectureId, Guid.NewGuid());
-        var attendee3 = new LectureAttendee(_lectureId, Guid.NewGuid());
+        var attendee1 = new LectureAttendee(_lectureId, _userId, _location);
+        var attendee2 = new LectureAttendee(_lectureId, Guid.NewGuid(), _location);
+        var attendee3 = new LectureAttendee(_lectureId, Guid.NewGuid(), _location);
 
         // Assert
         Assert.NotNull(attendee1);
@@ -112,7 +113,7 @@ public class LectureAttendeeTests
     public void LectureId_IsReadOnly_CannotBeChanged()
     {
         // Arrange
-        _ = new LectureAttendee(_lectureId, _userId);
+        _ = new LectureAttendee(_lectureId, _userId, _location);
 
         // Act - Try to change LectureId (should not be possible due to private setter)
         var lectureIdProperty = typeof(LectureAttendee).GetProperty("LectureId");
@@ -127,7 +128,7 @@ public class LectureAttendeeTests
     public void UserId_IsReadOnly_CannotBeChanged()
     {
         // Arrange
-        _ = new LectureAttendee(_lectureId, _userId);
+        _ = new LectureAttendee(_lectureId, _userId, _location);
 
         // Act - Try to change UserId (should not be possible due to private setter)
         var userIdProperty = typeof(LectureAttendee).GetProperty("UserId");
@@ -142,7 +143,7 @@ public class LectureAttendeeTests
     public void TimeJoined_IsInitProperty_CanBeSetOnlyDuringConstruction()
     {
         // Arrange
-        var attendee = new LectureAttendee(_lectureId, _userId);
+        var attendee = new LectureAttendee(_lectureId, _userId, _location);
         _ = attendee.TimeJoined;
 
         // Assert - TimeJoined should have init-only setter

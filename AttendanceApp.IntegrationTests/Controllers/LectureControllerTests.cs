@@ -317,7 +317,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
 
         var lectureId = await CreateLectureAsync();
         var changeLectureStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
-        var changeStatusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", changeLectureStatusBody);
+        var changeStatusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", changeLectureStatusBody);
         changeStatusResponse.EnsureSuccessStatusCode();
 
         // Switch back to student context
@@ -350,7 +350,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", studentJwt);
 
         // Act
-        var response = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}", content: null);
+        var response = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}?pos=40.7128,-74.006,10", content: null);
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -366,7 +366,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         var statusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
 
         // Act
-        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", statusBody);
+        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", statusBody);
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -383,7 +383,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         var secondStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.Ended };
 
         // Act
-        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", firstStatusBody);
+        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", firstStatusBody);
         response.EnsureSuccessStatusCode();
         response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", secondStatusBody);
         response.EnsureSuccessStatusCode();
@@ -762,18 +762,19 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
 
         var lectureId = await CreateLectureAsync();
         var changeStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
-        await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", changeStatusBody);
+        var changeStatusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", changeStatusBody);
+        changeStatusResponse.EnsureSuccessStatusCode();
 
         // Switch to student
         _httpClient.DefaultRequestHeaders.Authorization = null;
         var (_, _) = await CreateAndAuthenticateUserAsync();
 
         // Join first time
-        var firstJoinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}", content: null);
+        var firstJoinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}?pos=40.7128,-74.006,10", content: null);
         firstJoinResponse.EnsureSuccessStatusCode();
 
         // Join second time - should return a proper response
-        var secondJoinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}", content: null);
+        var secondJoinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}?pos=40.7128,-74.006,10", content: null);
 
         // Should return an error code for already joined
         Assert.True(
@@ -815,7 +816,7 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
         var nonExistentId = Guid.NewGuid();
         var statusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
 
-        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{nonExistentId}", statusBody);
+        var response = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{nonExistentId}?pos=40.7128,-74.006,10", statusBody);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

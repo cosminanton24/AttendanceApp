@@ -59,7 +59,6 @@ public class LectureController(IMediator mediator) : ControllerBase
     [HttpPost("join/{lectureId:guid}")]
     public async Task<IActionResult> JoinLecture([FromRoute] Guid lectureId, [FromQuery] string pos, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"JoinLecture called with lectureId: {lectureId}, position: {pos}");
         var userId = User.GetUserId();
         var command = new JoinLectureCommand(userId, lectureId, pos);
         var result = await mediator.Send(command, cancellationToken);

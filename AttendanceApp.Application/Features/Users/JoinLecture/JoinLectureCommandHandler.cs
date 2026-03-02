@@ -38,7 +38,7 @@ public class JoinLectureCommandHandler(IUserRepository _userRepo, ILectureReposi
             throw new ValidationException($"You can only join lectures as a student");
 
         var distance = lecture.Location!.Value.DistanceTo(Location.FromString(command.Position));
-        Console.WriteLine($"JOIN LECTURE Distance to lecture: {distance} meters.");
+
         if (distance > 100)
         {
             throw new ValidationException($"You are too far away from the lecture location to join. Distance: {distance} meters.");

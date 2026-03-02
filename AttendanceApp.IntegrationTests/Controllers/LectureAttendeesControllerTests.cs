@@ -203,7 +203,7 @@ public sealed class LectureAttendeesControllerIntegrationTests : IAsyncLifetime
         
         // Start the lecture
         var statusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
-        var statusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}", statusBody);
+        var statusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", statusBody);
         statusResponse.EnsureSuccessStatusCode();
 
         // Create student and join
@@ -236,7 +236,7 @@ public sealed class LectureAttendeesControllerIntegrationTests : IAsyncLifetime
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", studentJwt);
 
         // Student joins lecture
-        var joinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}", content: null);
+        var joinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}?pos=40.7128,-74.006,10", content: null);
         joinResponse.EnsureSuccessStatusCode();
 
         // Professor checks attendees
