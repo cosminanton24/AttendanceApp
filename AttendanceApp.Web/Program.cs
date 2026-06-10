@@ -169,6 +169,8 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+
+app.MapGet("/", () => Results.Redirect("/home/index"));
 app.MapControllers();
 
 app.MapControllerRoute(
