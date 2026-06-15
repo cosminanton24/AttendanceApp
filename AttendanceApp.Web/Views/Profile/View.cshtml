@@ -8,12 +8,13 @@
     <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
 }
 
-<div class="profile-page">
+<div class="profile-page @(Model.UserType == UserType.Professor ? "profile-page--calendar" : "")">
     <!-- Header / Navigation -->
     <nav class="profile-nav">
         <a href="/home/index" class="back-btn" aria-label="Back">
             <span class="back-icon">←</span>
         </a>
+        <img src="~/AttendanceAppLogo.png" class="profile-nav-logo" alt="" />
         <span class="nav-title">Profile</span>
         <div class="nav-spacer"></div>
     </nav>

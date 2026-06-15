@@ -27,6 +27,16 @@ body{
   padding:0 24px;
 }
 
+.profile-page--calendar{
+  max-width:1120px;
+}
+
+.profile-page--calendar .profile-card{
+  max-width:800px;
+  margin-left:auto;
+  margin-right:auto;
+}
+
 /* ===== Navigation ===== */
 .profile-nav{
   display:flex;
@@ -63,6 +73,15 @@ body{
   font-size:22px;
   font-weight:600;
   color:var(--text);
+}
+
+.profile-nav-logo{
+  width:42px;
+  height:42px;
+  border-radius:12px;
+  object-fit:cover;
+  border:1px solid rgba(147,197,253,.2);
+  box-shadow:0 10px 24px rgba(37,99,235,.28);
 }
 
 .nav-spacer{
@@ -392,8 +411,9 @@ body{
   margin-top:32px;
   background:var(--card);
   border:1px solid var(--stroke);
-  border-radius:24px;
+  border-radius:8px;
   padding:28px;
+  width:100%;
 }
 
 .profile-cal-head{
@@ -687,5 +707,382 @@ body{
   }
   .profile-calendar .cal-daynum{
     font-size:11px;
+  }
+}
+
+/* ===== Profile Visual Refresh ===== */
+:root{
+  --accent-green:#22c55e;
+  --accent-green-soft:rgba(34,197,94,.16);
+  --accent-blue-soft:rgba(59,130,246,.16);
+}
+
+body{
+  background:
+    linear-gradient(180deg, rgba(11,18,32,.96), rgba(7,10,18,1)),
+    var(--bg);
+}
+
+.profile-page{
+  padding-top:18px;
+  padding-bottom:56px;
+}
+
+.profile-nav{
+  position:sticky;
+  top:16px;
+  z-index:20;
+  margin-bottom:18px;
+  padding:12px;
+  border:1px solid rgba(147,197,253,.16);
+  border-radius:8px;
+  background:
+    linear-gradient(135deg, rgba(8,13,23,.96), rgba(12,18,32,.9)),
+    rgba(7,10,18,.72);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.07),
+    0 16px 40px rgba(2,6,23,.22);
+  backdrop-filter:blur(16px);
+}
+
+.profile-nav::after{
+  content:"";
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:0;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg, var(--accent-green), var(--accent1), var(--accent2));
+}
+
+.back-btn{
+  width:42px;
+  height:42px;
+  border-radius:8px;
+  border-color:rgba(147,197,253,.2);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.78), rgba(7,10,18,.62)),
+    rgba(59,130,246,.1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+
+.back-btn:hover{
+  border-color:rgba(96,165,250,.56);
+  box-shadow:
+    0 0 0 4px rgba(59,130,246,.14),
+    0 12px 28px rgba(37,99,235,.2);
+}
+
+.profile-nav-logo{
+  width:40px;
+  height:40px;
+  border-radius:8px;
+  border-color:rgba(191,219,254,.28);
+  box-shadow:
+    0 12px 28px rgba(37,99,235,.3),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.nav-title{
+  color:#f8fbff;
+  font-size:20px;
+  font-weight:900;
+  text-shadow:0 12px 28px rgba(59,130,246,.24);
+}
+
+.profile-card{
+  position:relative;
+  border-radius:8px;
+  border-color:rgba(147,197,253,.16);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.86), rgba(8,13,23,.72)),
+    rgba(11,18,32,.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 24px 70px rgba(2,6,23,.34);
+  overflow:hidden;
+}
+
+.profile-card::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  height:3px;
+  background:linear-gradient(90deg, var(--accent-green), var(--accent1), var(--accent2));
+}
+
+.profile-header{
+  position:relative;
+  z-index:1;
+  padding:2px;
+}
+
+.profile-avatar{
+  position:relative;
+  background:
+    linear-gradient(135deg, var(--accent-green), var(--accent1) 55%, var(--accent2));
+  border:1px solid rgba(191,219,254,.28);
+  box-shadow:
+    0 20px 48px rgba(37,99,235,.3),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.profile-avatar::after{
+  content:"";
+  position:absolute;
+  inset:8px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.18);
+}
+
+.profile-avatar span{
+  position:relative;
+  z-index:1;
+  text-shadow:0 8px 24px rgba(2,6,23,.34);
+}
+
+.profile-name{
+  color:#f8fbff;
+  font-weight:900;
+  letter-spacing:0;
+}
+
+.profile-email{
+  color:#b9c9de;
+}
+
+.profile-badge{
+  border:1px solid rgba(255,255,255,.1);
+  font-weight:900;
+}
+
+.badge-student{
+  background:linear-gradient(90deg, rgba(59,130,246,.22), rgba(96,165,250,.16));
+  color:#bfdbfe;
+}
+
+.badge-professor{
+  background:linear-gradient(90deg, rgba(34,197,94,.2), rgba(59,130,246,.16));
+  color:#bbf7d0;
+}
+
+.badge-admin{
+  background:linear-gradient(90deg, rgba(245,158,11,.22), rgba(59,130,246,.12));
+  color:#fde68a;
+}
+
+.profile-stats{
+  gap:14px;
+  margin-top:34px;
+  padding:18px 0;
+  border-color:rgba(147,197,253,.12);
+}
+
+.stat-item{
+  border:1px solid rgba(147,197,253,.12);
+  border-radius:8px;
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.62), rgba(7,10,18,.42)),
+    rgba(59,130,246,.06);
+}
+
+.stat-item:hover{
+  background:
+    linear-gradient(180deg, rgba(59,130,246,.18), rgba(34,197,94,.08)),
+    rgba(7,10,18,.5);
+  border-color:rgba(96,165,250,.34);
+  box-shadow:0 12px 30px rgba(37,99,235,.16);
+}
+
+.stat-count{
+  color:#dbeafe;
+  font-weight:900;
+}
+
+.stat-label{
+  color:#a7f3d0;
+}
+
+.stat-divider{
+  display:none;
+}
+
+.follow-btn{
+  border:1px solid rgba(147,197,253,.34);
+  background:
+    linear-gradient(135deg, var(--accent-green), var(--accent1) 58%, var(--accent2));
+  color:#fff;
+  font-weight:900;
+  box-shadow:
+    0 14px 34px rgba(37,99,235,.3),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.follow-btn:hover{
+  box-shadow:
+    0 0 0 5px rgba(59,130,246,.14),
+    0 18px 44px rgba(37,99,235,.36);
+}
+
+.follow-btn.following{
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.78), rgba(7,10,18,.62)),
+    rgba(34,197,94,.08);
+  border-color:rgba(34,197,94,.28);
+  color:#bbf7d0;
+}
+
+.logout-btn{
+  border-color:rgba(248,113,113,.34);
+  background:
+    linear-gradient(180deg, rgba(127,29,29,.22), rgba(7,10,18,.42)),
+    rgba(239,68,68,.1);
+  font-weight:900;
+}
+
+.users-modal-backdrop{
+  background:rgba(0,0,0,.48);
+  backdrop-filter:blur(2px);
+}
+
+.users-modal-content{
+  border-radius:8px;
+  border-color:rgba(147,197,253,.16);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.96), rgba(8,13,23,.94)),
+    var(--card);
+  box-shadow:0 28px 80px rgba(0,0,0,.5);
+}
+
+.users-modal-header{
+  border-color:rgba(147,197,253,.12);
+}
+
+.users-modal-title{
+  color:#f8fbff;
+  font-weight:900;
+}
+
+.users-modal-close{
+  border-radius:8px;
+  background:rgba(59,130,246,.1);
+}
+
+.user-list-item:hover{
+  background:linear-gradient(90deg, rgba(59,130,246,.12), rgba(34,197,94,.06));
+}
+
+.user-list-avatar{
+  background:linear-gradient(135deg, var(--accent-green), var(--accent1), var(--accent2));
+  box-shadow:0 10px 24px rgba(37,99,235,.22);
+}
+
+.profile-calendar{
+  border-radius:8px;
+  border-color:rgba(147,197,253,.16);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.86), rgba(8,13,23,.72)),
+    rgba(11,18,32,.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 24px 70px rgba(2,6,23,.28);
+}
+
+.profile-cal-head{
+  border-color:rgba(147,197,253,.12);
+}
+
+.profile-cal-title{
+  color:#f8fbff;
+  font-weight:900;
+}
+
+.profile-calendar .cal-nav,
+.profile-calendar .cal-today{
+  border-radius:8px;
+  border-color:rgba(147,197,253,.2);
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.72), rgba(7,10,18,.58)),
+    rgba(59,130,246,.1);
+}
+
+.profile-calendar .cal-nav:hover,
+.profile-calendar .cal-today:hover{
+  border-color:rgba(96,165,250,.56);
+  color:#fff;
+  box-shadow:
+    0 0 0 4px rgba(59,130,246,.14),
+    0 12px 28px rgba(37,99,235,.16);
+}
+
+.profile-calendar .cal-cell{
+  border-radius:8px;
+  background:
+    linear-gradient(180deg, rgba(15,23,42,.58), rgba(7,10,18,.38)),
+    rgba(59,130,246,.04);
+}
+
+.profile-calendar .cal-cell:hover,
+.profile-calendar .cal-cell.selected{
+  border-color:rgba(96,165,250,.52);
+  box-shadow:0 12px 26px rgba(37,99,235,.16);
+}
+
+.profile-calendar .cal-cell.selected{
+  background:
+    linear-gradient(180deg, rgba(59,130,246,.2), rgba(34,197,94,.08)),
+    rgba(7,10,18,.46);
+}
+
+.profile-calendar .cal-dot{
+  background:linear-gradient(135deg, var(--accent-green), var(--accent2));
+}
+
+.profile-calendar .cal-day{
+  border-radius:8px;
+  border-color:rgba(147,197,253,.12);
+  background:rgba(7,10,18,.34);
+}
+
+.profile-calendar .cal-day-head{
+  border-color:rgba(147,197,253,.12);
+  color:#f8fbff;
+  font-weight:900;
+}
+
+.profile-calendar .cal-ev{
+  border-color:rgba(96,165,250,.34);
+  background:
+    linear-gradient(135deg, rgba(59,130,246,.22), rgba(34,197,94,.08)),
+    rgba(7,10,18,.52);
+  border-radius:8px;
+}
+
+.profile-calendar .cal-ev:hover{
+  background:
+    linear-gradient(135deg, rgba(59,130,246,.3), rgba(34,197,94,.12)),
+    rgba(7,10,18,.58);
+}
+
+.profile-calendar .cal-now,
+.profile-calendar .cal-now::before{
+  background:var(--accent-green);
+}
+
+@media (max-width: 640px){
+  .profile-nav{
+    top:8px;
+    gap:10px;
+  }
+
+  .profile-stats{
+    flex-direction:column;
+  }
+
+  .stat-item{
+    width:100%;
   }
 }

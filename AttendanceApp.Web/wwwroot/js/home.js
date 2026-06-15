@@ -63,8 +63,13 @@
     dayHead: popover.querySelector('.cal-day-head')
   };
 
-  // Prevent clicks inside popover from closing it
+  // Keep dialog content clicks inside, close when clicking the backdrop.
   popover.addEventListener('click', function (e) {
+    if (e.target === popover) {
+      closePopover();
+      return;
+    }
+
     e.stopPropagation();
   });
 
@@ -242,6 +247,7 @@
   function openPopover() {
     popover.classList.add('open');
     popover.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('home-overlay-open');
 
     if (typeof state.onOpenCb === 'function') {
       state.onOpenCb();
@@ -256,6 +262,31 @@
   function closePopover() {
     popover.classList.remove('open');
     popover.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('home-overlay-open');
+
+    const lecturePanel = popover.querySelector('#lecturePopup');
+    if (lecturePanel) {
+      lecturePanel.style.display = 'none';
+      lecturePanel.classList.remove('lecture-popup--docked');
+      popover.classList.remove('cal-popover--with-lecture-panel');
+      popover.classList.remove('cal-popover--legacy-lecture-panel');
+      popover.style.removeProperty('--lecture-panel-top');
+      popover.style.removeProperty('--lecture-panel-left');
+      popover.style.removeProperty('--lecture-panel-right');
+      popover.style.removeProperty('--lecture-panel-width');
+      lecturePanel.closest('.cal-dialog')?.classList.remove('cal-dialog--with-lecture-panel');
+    }
+
+    const studentLecturePanel = popover.querySelector('#studentLecturePopup');
+    if (studentLecturePanel) {
+      studentLecturePanel.style.display = 'none';
+      studentLecturePanel.classList.remove('student-lecture-popup--docked');
+      popover.classList.remove('cal-popover--with-student-lecture-panel');
+      popover.style.removeProperty('--student-lecture-panel-top');
+      popover.style.removeProperty('--student-lecture-panel-left');
+      popover.style.removeProperty('--student-lecture-panel-right');
+      popover.style.removeProperty('--student-lecture-panel-width');
+    }
   }
 
   /**
@@ -999,8 +1030,9 @@
 
   const searchInput = document.getElementById('userSearch');
   const searchResults = document.getElementById('searchResults');
+  const searchContainer = searchInput?.closest('.search-container');
 
-  if (!searchInput || !searchResults) {
+  if (!searchInput || !searchResults || !searchContainer) {
     return;
   }
 
@@ -1014,7 +1046,8 @@
     currentPage: 0,
     totalCount: 0,
     loadedUsers: [],
-    isLoading: false
+    isLoading: false,
+    ignoreCloseUntil: 0
   };
 
   // ============================================================================
@@ -1070,6 +1103,35 @@
   function closeResults() {
     searchResults.classList.remove('open');
     searchResults.setAttribute('aria-hidden', 'true');
+  }
+
+  /**
+   * Opens the search modal.
+   */
+  function openSearchModal() {
+    state.ignoreCloseUntil = performance.now() + 250;
+    searchContainer.classList.add('search-modal-open');
+    searchInput.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('home-overlay-open');
+  }
+
+  /**
+   * Checks whether a close attempt belongs to the same interaction that opened the modal.
+   * @returns {boolean} True if the close should be ignored.
+   */
+  function shouldIgnoreCloseAttempt() {
+    return performance.now() < state.ignoreCloseUntil;
+  }
+
+  /**
+   * Closes the search modal.
+   */
+  function closeSearchModal() {
+    state.ignoreCloseUntil = 0;
+    searchContainer.classList.remove('search-modal-open');
+    searchInput.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('home-overlay-open');
+    closeResults();
   }
 
   // ============================================================================
@@ -1234,6 +1296,7 @@
    * Handles input changes in the search field.
    */
   function handleInput() {
+    openSearchModal();
     const query = searchInput.value.trim();
 
     if (state.debounceTimer) {
@@ -1261,6 +1324,7 @@
    * Handles focus on the search input.
    */
   function handleFocus() {
+    openSearchModal();
     if (state.loadedUsers.length > 0 || (state.currentQuery && state.totalCount === 0)) {
       renderResults();
     }
@@ -1274,19 +1338,52 @@
    * Initializes search event listeners.
    */
   function initEventListeners() {
+    searchInput.setAttribute('aria-haspopup', 'dialog');
+    searchInput.setAttribute('aria-expanded', 'false');
     searchInput.addEventListener('input', handleInput);
     searchInput.addEventListener('focus', handleFocus);
+    searchInput.addEventListener('pointerdown', function (e) {
+      openSearchModal();
+      e.stopPropagation();
+    });
+    searchInput.addEventListener('click', function (e) {
+      openSearchModal();
+      e.stopPropagation();
+    });
 
     // Close results when clicking outside
     document.addEventListener('click', function (e) {
+      if (!searchContainer.classList.contains('search-modal-open')) {
+        return;
+      }
+
+      if (shouldIgnoreCloseAttempt()) {
+        return;
+      }
+
       if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-        closeResults();
+        closeSearchModal();
       }
     });
 
-    // Keep results open when clicking inside
-    searchResults.addEventListener('click', function (e) {
+    searchContainer.addEventListener('click', function (e) {
+      if (e.target === searchContainer) {
+        if (shouldIgnoreCloseAttempt()) {
+          e.stopPropagation();
+          return;
+        }
+
+        closeSearchModal();
+        return;
+      }
+
       e.stopPropagation();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && searchContainer.classList.contains('search-modal-open')) {
+        closeSearchModal();
+      }
     });
   }
 

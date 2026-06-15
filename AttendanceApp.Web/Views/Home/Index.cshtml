@@ -9,7 +9,10 @@
 }
 <nav class="navbar">
     <div class="nav-left">
-        <span class="navbar-brand">AttendanceApp</span>
+        <a href="/home/index" class="navbar-brand" aria-label="AttendanceApp home">
+            <img src="~/AttendanceAppLogo.png" class="navbar-logo" alt="" />
+            <span>AttendanceApp</span>
+        </a>
     </div>
 
     <div class="nav-right">
@@ -53,7 +56,7 @@
     </div>
 </nav>
 
-<div class="container mt-4">
+<main class="home-shell">
     @if (Model.UserType == UserType.Student)
     {
         @await Html.PartialAsync("_StudentHome")
@@ -78,14 +81,15 @@
     }
 
     
-</div>
+</main>
 
-<!-- Calendar popover -->
-<div id="calendarPopover" class="cal-popover" aria-hidden="true">
+<!-- Calendar modal -->
+<div id="calendarPopover" class="cal-popover" role="dialog" aria-modal="true" aria-labelledby="calendarModalTitle" aria-hidden="true">
+  <div class="cal-dialog">
   <div class="cal-head">
     <div class="cal-title">
       <button type="button" class="cal-nav" data-cal-prev aria-label="Previous month">‹</button>
-      <span data-cal-month></span>
+      <span id="calendarModalTitle" data-cal-month></span>
       <button type="button" class="cal-nav" data-cal-next aria-label="Next month">›</button>
     </div>
 
@@ -114,12 +118,14 @@
       </div>
     </div>
   </div>
+  </div>
 </div>
 
-<!-- Quizzes popover (professors only) -->
+<!-- Quizzes modal (professors only) -->
 @if (Model.UserType == UserType.Professor)
 {
-<div id="quizzesPopover" class="quiz-popover" aria-hidden="true">
+<div id="quizzesPopover" class="quiz-popover" role="dialog" aria-modal="true" aria-labelledby="quizTitleText" aria-hidden="true">
+  <div class="quiz-dialog">
   <div class="quiz-head">
     <div class="quiz-title">
       <span id="quizTitleText">My Quizzes</span>
@@ -142,6 +148,7 @@
   </div>
   <div class="quiz-body">
     <div class="quiz-list" id="quizList" aria-live="polite"></div>
+  </div>
   </div>
 </div>
 

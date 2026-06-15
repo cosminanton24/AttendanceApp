@@ -77,6 +77,7 @@
     track: document.getElementById('studentLectureProgressTrack'),
     fill: document.getElementById('studentLectureProgressFill'),
     nowLine: document.getElementById('studentLectureNowLine'),
+    tryLoadQuizBtn: document.getElementById('tryLoadQuizBtn'),
     joinBtn: document.getElementById('joinClassBtn'),
     classIdInput: document.getElementById('classIdInput'),
     // Quiz elements
@@ -148,6 +149,33 @@
     return normalized === LectureStatus.IN_PROGRESS ||
            normalized === LectureStatus.IN_PROGRESS_STRING ||
            normalized === LectureStatus.IN_PROGRESS_DISPLAY;
+  }
+
+  /**
+   * Checks if a lecture is currently within its scheduled time window.
+   * @param {Object} item - The lecture item.
+   * @param {Date} now - The current time.
+   * @returns {boolean} True if the lecture is happening now.
+   */
+  function isLectureHappeningNow(item, now = new Date()) {
+    const window = getLectureTimeWindow(item);
+
+    if (!window) {
+      return false;
+    }
+
+    return now >= window.start && now < window.end;
+  }
+
+  /**
+   * Checks if a lecture should be shown as the student's current class.
+   * @param {Object} item - The lecture item.
+   * @param {Date} now - The current time.
+   * @returns {boolean} True if the lecture is active and current.
+   */
+  function isCurrentActiveLecture(item, now = new Date()) {
+    return isActiveLectureStatus(getItemProperty(item, 'status', 'Status')) &&
+           isLectureHappeningNow(item, now);
   }
 
   /**
@@ -313,6 +341,11 @@
     state.activeLectureWindow = null;
     state.activeLectureId = null;
 
+    if (elements.tryLoadQuizBtn) {
+      elements.tryLoadQuizBtn.disabled = true;
+      elements.tryLoadQuizBtn.classList.remove('is-loading');
+    }
+
     if (state.lectureProgressTimer) {
       clearInterval(state.lectureProgressTimer);
       state.lectureProgressTimer = null;
@@ -424,7 +457,12 @@
     const lectureId = getItemProperty(item, 'id', 'Id', null);
     if (lectureId) {
       state.activeLectureId = lectureId;
+      if (elements.tryLoadQuizBtn) {
+        elements.tryLoadQuizBtn.disabled = false;
+      }
       fetchAndDisplayActiveQuiz(lectureId);
+    } else if (elements.tryLoadQuizBtn) {
+      elements.tryLoadQuizBtn.disabled = true;
     }
   }
 
@@ -1204,6 +1242,29 @@
     }
   }
 
+  /**
+   * Manually checks whether the active lecture has a quiz available.
+   */
+  async function handleTryLoadQuiz() {
+    if (!state.activeLectureId) {
+      return;
+    }
+
+    if (elements.tryLoadQuizBtn) {
+      elements.tryLoadQuizBtn.disabled = true;
+      elements.tryLoadQuizBtn.classList.add('is-loading');
+    }
+
+    try {
+      await fetchAndDisplayActiveQuiz(state.activeLectureId);
+    } finally {
+      if (elements.tryLoadQuizBtn && state.activeLectureId) {
+        elements.tryLoadQuizBtn.disabled = false;
+        elements.tryLoadQuizBtn.classList.remove('is-loading');
+      }
+    }
+  }
+
   // ============================================================================
   // API Functions
   // ============================================================================
@@ -1286,8 +1347,9 @@
 
     // Check for active lecture and switch UI if found
     try {
+      const now = new Date();
       const activeLecture = data.find(function (item) {
-        return isActiveLectureStatus(getItemProperty(item, 'status', 'Status'));
+        return isCurrentActiveLecture(item, now);
       });
 
       if (activeLecture) {
@@ -1357,7 +1419,7 @@
 
     const activeLecture = Array.isArray(data)
       ? data.find(function (item) {
-          return isActiveLectureStatus(getItemProperty(item, 'status', 'Status'));
+          return isCurrentActiveLecture(item);
         })
       : null;
 
@@ -1542,6 +1604,61 @@
   }
 
   /**
+   * Hides the student lecture detail panel and clears calendar placement state.
+   * @param {HTMLElement|null} popup - The lecture detail panel.
+   */
+  function hideLecturePopup(popup) {
+    if (!popup) {
+      return;
+    }
+
+    const calendarPopover = popup.closest('.cal-popover');
+
+    popup.style.display = 'none';
+    popup.classList.remove('student-lecture-popup--docked');
+    calendarPopover?.classList.remove('cal-popover--with-student-lecture-panel');
+    calendarPopover?.style.removeProperty('--student-lecture-panel-top');
+    calendarPopover?.style.removeProperty('--student-lecture-panel-left');
+    calendarPopover?.style.removeProperty('--student-lecture-panel-right');
+    calendarPopover?.style.removeProperty('--student-lecture-panel-width');
+  }
+
+  /**
+   * Aligns the student lecture panel with the top edge of the calendar dialog.
+   * @param {HTMLElement} popup - The lecture detail panel.
+   */
+  function updateLecturePopupPlacement(popup) {
+    const calendarPopover = document.getElementById('calendarPopover');
+    const calendarDialog = calendarPopover?.querySelector('.cal-dialog');
+
+    if (!calendarPopover || !calendarDialog || !popup.classList.contains('student-lecture-popup--docked')) {
+      return;
+    }
+
+    const dialogRect = calendarDialog.getBoundingClientRect();
+    const gap = 14;
+    const viewportPadding = 20;
+    const minPanelWidth = 280;
+    const maxPanelWidth = 320;
+    const availableRightWidth = window.innerWidth - dialogRect.right - gap - viewportPadding;
+    const panelTop = Math.max(12, Math.round(dialogRect.top));
+
+    calendarPopover.style.setProperty('--student-lecture-panel-top', `${panelTop}px`);
+
+    if (availableRightWidth >= minPanelWidth) {
+      const panelWidth = Math.min(maxPanelWidth, availableRightWidth);
+      calendarPopover.style.setProperty('--student-lecture-panel-left', `${Math.round(dialogRect.right + gap)}px`);
+      calendarPopover.style.setProperty('--student-lecture-panel-right', 'auto');
+      calendarPopover.style.setProperty('--student-lecture-panel-width', `${Math.round(panelWidth)}px`);
+      return;
+    }
+
+    calendarPopover.style.removeProperty('--student-lecture-panel-left');
+    calendarPopover.style.setProperty('--student-lecture-panel-right', `${viewportPadding}px`);
+    calendarPopover.style.setProperty('--student-lecture-panel-width', `${maxPanelWidth}px`);
+  }
+
+  /**
    * Creates the lecture popup element if it doesn't exist.
    * @returns {HTMLElement} The popup element.
    */
@@ -1564,14 +1681,16 @@
           </div>
         </div>
       `;
-      document.body.appendChild(popup);
+      const calendarHost = document.getElementById('calendarPopover') ||
+        document.body;
+      calendarHost.appendChild(popup);
 
       // Close on clicking the close button
       const closeBtn = popup.querySelector('.slp-close');
       if (closeBtn) {
         closeBtn.addEventListener('click', function (event) {
           event.stopPropagation();
-          popup.style.display = 'none';
+          hideLecturePopup(popup);
         });
       }
 
@@ -1582,10 +1701,20 @@
 
       // Close on outside click
       document.addEventListener('click', function (event) {
-        if (!popup.contains(event.target)) {
-          popup.style.display = 'none';
+        const calendarPopover = document.getElementById('calendarPopover');
+        if (!popup.contains(event.target) && !calendarPopover?.contains(event.target)) {
+          hideLecturePopup(popup);
         }
       });
+
+      window.addEventListener('resize', function () {
+        updateLecturePopupPlacement(popup);
+      });
+    }
+
+    const calendarHost = document.getElementById('calendarPopover');
+    if (calendarHost && popup.parentElement !== calendarHost) {
+      calendarHost.appendChild(popup);
     }
 
     return popup;
@@ -1597,6 +1726,22 @@
    * @param {HTMLElement|null} anchorEl - The anchor element.
    */
   function positionLecturePopup(popup, anchorEl) {
+    const calendarPopover = document.getElementById('calendarPopover');
+
+    if (calendarPopover) {
+      calendarPopover.classList.add('cal-popover--with-student-lecture-panel');
+      popup.classList.add('student-lecture-popup--docked');
+      popup.style.display = 'flex';
+      popup.style.position = '';
+      popup.style.zIndex = '';
+      popup.style.top = '';
+      popup.style.right = '';
+      popup.style.bottom = '';
+      popup.style.left = '';
+      updateLecturePopupPlacement(popup);
+      return;
+    }
+
     popup.style.display = 'block';
     popup.style.position = 'fixed';
     popup.style.zIndex = '20000';
@@ -1741,6 +1886,10 @@
           navigateToJoinPage();
         }
       });
+    }
+
+    if (elements.tryLoadQuizBtn) {
+      elements.tryLoadQuizBtn.addEventListener('click', handleTryLoadQuiz);
     }
   }
 
