@@ -2343,6 +2343,63 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /**
+   * Hides the lecture detail panel and restores the calendar layout.
+   * @param {HTMLElement|null} popup - The lecture detail panel.
+   */
+  function hideLecturePopup(popup) {
+    if (!popup) {
+      return;
+    }
+
+    const calendarPopover = popup.closest('.cal-popover');
+
+    popup.style.display = 'none';
+    popup.classList.remove('lecture-popup--docked');
+    calendarPopover?.classList.remove('cal-popover--with-lecture-panel');
+    calendarPopover?.classList.remove('cal-popover--legacy-lecture-panel');
+    calendarPopover?.style.removeProperty('--lecture-panel-top');
+    calendarPopover?.style.removeProperty('--lecture-panel-left');
+    calendarPopover?.style.removeProperty('--lecture-panel-right');
+    calendarPopover?.style.removeProperty('--lecture-panel-width');
+    popup.closest('.cal-dialog')?.classList.remove('cal-dialog--with-lecture-panel');
+  }
+
+  /**
+   * Aligns the lecture detail panel with the top edge of the calendar dialog.
+   * @param {HTMLElement} popup - The lecture detail panel.
+   */
+  function updateLecturePopupPlacement(popup) {
+    const calendarPopover = document.getElementById('calendarPopover');
+    const calendarDialog = calendarPopover?.querySelector('.cal-dialog');
+
+    if (!calendarPopover || !calendarDialog || !popup.classList.contains('lecture-popup--docked')) {
+      return;
+    }
+
+    const dialogRect = calendarDialog.getBoundingClientRect();
+    const gap = 14;
+    const viewportPadding = 20;
+    const minPanelWidth = 280;
+    const maxPanelWidth = 320;
+    const availableRightWidth = window.innerWidth - dialogRect.right - gap - viewportPadding;
+    const panelTop = Math.max(12, Math.round(dialogRect.top));
+
+    calendarPopover.style.setProperty('--lecture-panel-top', `${panelTop}px`);
+
+    if (availableRightWidth >= minPanelWidth) {
+      const panelWidth = Math.min(maxPanelWidth, availableRightWidth);
+      calendarPopover.style.setProperty('--lecture-panel-left', `${Math.round(dialogRect.right + gap)}px`);
+      calendarPopover.style.setProperty('--lecture-panel-right', 'auto');
+      calendarPopover.style.setProperty('--lecture-panel-width', `${Math.round(panelWidth)}px`);
+      return;
+    }
+
+    calendarPopover.style.removeProperty('--lecture-panel-left');
+    calendarPopover.style.setProperty('--lecture-panel-right', `${viewportPadding}px`);
+    calendarPopover.style.setProperty('--lecture-panel-width', `${maxPanelWidth}px`);
+  }
+
+  /**
    * Creates the lecture popup element if it doesn't exist.
    * @returns {HTMLElement} The popup element.
    */
@@ -2369,7 +2426,9 @@ document.addEventListener('DOMContentLoaded', function () {
           <div class="lp-actions mt-2"></div>
         </div>
       `;
-      document.body.appendChild(popup);
+      const calendarHost = document.getElementById('calendarPopover') ||
+        document.body;
+      calendarHost.appendChild(popup);
 
       // Close on clicking the close button
       const closeBtn = popup.querySelector('.lp-close');
@@ -2377,7 +2436,7 @@ document.addEventListener('DOMContentLoaded', function () {
         closeBtn.addEventListener('click', function (event) {
           event.stopPropagation();
           try {
-            popup.style.display = 'none';
+            hideLecturePopup(popup);
           } catch {
             // Ignore close errors
           }
@@ -2391,10 +2450,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // Close on outside click
       document.addEventListener('click', function (event) {
-        if (!popup.contains(event.target)) {
-          popup.style.display = 'none';
+        const calendarPopover = document.getElementById('calendarPopover');
+        if (!popup.contains(event.target) && !calendarPopover?.contains(event.target)) {
+          hideLecturePopup(popup);
         }
       });
+
+      window.addEventListener('resize', function () {
+        updateLecturePopupPlacement(popup);
+      });
+    }
+
+    const calendarHost = document.getElementById('calendarPopover');
+    if (calendarHost && popup.parentElement !== calendarHost) {
+      calendarHost.appendChild(popup);
     }
 
     return popup;
@@ -2406,6 +2475,22 @@ document.addEventListener('DOMContentLoaded', function () {
    * @param {HTMLElement|null} anchorEl - The anchor element.
    */
   function positionLecturePopup(popup, anchorEl) {
+    const calendarPopover = document.getElementById('calendarPopover');
+
+    if (calendarPopover) {
+      calendarPopover?.classList.add('cal-popover--with-lecture-panel');
+      popup.classList.add('lecture-popup--docked');
+      popup.style.display = 'flex';
+      popup.style.position = '';
+      popup.style.zIndex = '';
+      popup.style.top = '';
+      popup.style.right = '';
+      popup.style.bottom = '';
+      popup.style.left = '';
+      updateLecturePopupPlacement(popup);
+      return;
+    }
+
     popup.style.display = 'block';
     popup.style.position = 'fixed';
     popup.style.zIndex = '20000';
@@ -2524,7 +2609,7 @@ document.addEventListener('DOMContentLoaded', function () {
         viewBtn.className = 'btn-inline btn-sm';
         viewBtn.textContent = 'Results';
         viewBtn.addEventListener('click', function () {
-          popup.style.display = 'none';
+          hideLecturePopup(popup);
           openQuizResultsModal(quiz.quizLectureId, quiz.name);
         });
 
@@ -2587,7 +2672,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }));
       } else if (currentNormalized === LectureStatus.ENDED || currentNormalized === 'ended') {
         actionsEl.appendChild(createActionButton('View Attendees', 'btn-inline', function () {
-          popup.style.display = 'none';
+          hideLecturePopup(popup);
           openAttendeesPopover(id, null, true);
         }));
       } else if (currentNormalized === LectureStatus.CANCELED || currentNormalized === 'canceled') {
@@ -2999,7 +3084,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       } else if (popup) {
         try {
-          popup.style.display = 'none';
+          hideLecturePopup(popup);
         } catch {
           // Ignore popup hide errors
         }
@@ -3106,7 +3191,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // Hide popup
       if (popup) {
         try {
-          popup.style.display = 'none';
+          hideLecturePopup(popup);
         } catch {
           // Ignore popup hide errors
         }

@@ -7,6 +7,20 @@ a.navbar-brand {
   word-break: break-all;
 }
 
+.app-navbar-brand{
+  display:inline-flex;
+  align-items:center;
+  gap:.5rem;
+  word-break:normal;
+}
+
+.app-navbar-logo{
+  width:34px;
+  height:34px;
+  border-radius:.6rem;
+  object-fit:cover;
+}
+
 a {
   color: #0077cc;
 }

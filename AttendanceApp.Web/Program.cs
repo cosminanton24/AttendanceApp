@@ -13,6 +13,7 @@ using System.Text;
 using DotNetEnv;
 using Microsoft.OpenApi;
 using System.Text.Json.Serialization;
+using AttendanceApp.Web.Services;
 
 
 Env.Load("../.env");
@@ -54,6 +55,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
 
         options.UseNpgsql(connString);
     });
+
+    builder.Services.AddHostedService<LectureStatusBackgroundService>();
 }
  
 builder.Services.AddValidatorsFromAssembly(typeof(IAssemblyMarker).Assembly);
@@ -169,8 +172,8 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-
 app.MapGet("/", () => Results.Redirect("/home/index"));
+
 app.MapControllers();
 
 app.MapControllerRoute(

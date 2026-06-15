@@ -35,12 +35,17 @@
 
   <!-- IN CLASS STATE -->
   <div id="inClassState" class="home-card" hidden>
-    <h2>You are currently in class </h2>
-    <p class="sub attention">Pay attention!</p>
+    <div class="student-active-header">
+      <div class="student-active-header__copy">
+        <p class="student-active-header__eyebrow">Live lecture</p>
+        <h2>You are currently in class</h2>
+        <p class="sub attention">Pay attention!</p>
+      </div>
 
-    <div class="current-class">
-      <div id="className" class="current-class__name"></div>
-      <div id="classDesc" class="current-class__desc"></div>
+      <div class="current-class">
+        <div id="className" class="current-class__name"></div>
+        <div id="classDesc" class="current-class__desc"></div>
+      </div>
     </div>
 
     <div class="student-lecture-progress" aria-label="Lecture progress">
@@ -56,6 +61,18 @@
       <div id="studentLectureProgressTrack" class="student-lecture-progress__track">
         <div id="studentLectureProgressFill" class="student-lecture-progress__fill" aria-hidden="true"></div>
         <div id="studentLectureNowLine" class="student-lecture-progress__now" aria-hidden="true"></div>
+      </div>
+      <div class="student-lecture-progress__actions">
+        <button
+          type="button"
+          id="tryLoadQuizBtn"
+          class="student-lecture-progress__quiz-btn"
+          aria-label="Try load quiz"
+          title="Try load quiz"
+          disabled>
+          <span class="student-lecture-progress__quiz-icon" aria-hidden="true">&#x1F504;</span>
+          <span class="visually-hidden">Try load quiz</span>
+        </button>
       </div>
     </div>
 

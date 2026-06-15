@@ -139,6 +139,7 @@
       }
       el.popover.classList.add('open');
       el.popover.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('home-overlay-open');
       state.popoverOpen = true;
       if (state.loadedQuizzes.length === 0 && !state.isLoading) {
         fetchQuizzes(0);
@@ -149,6 +150,7 @@
     function closePopover() {
       el.popover.classList.remove('open');
       el.popover.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('home-overlay-open');
       state.popoverOpen = false;
     }
 
@@ -666,6 +668,11 @@
     function initEventListeners() {
       // Popover
       el.quizzesBtn?.addEventListener('click', togglePopover);
+      el.popover?.addEventListener('click', e => {
+        if (e.target === el.popover) {
+          closePopover();
+        }
+      });
       el.popover.querySelectorAll('[data-quiz-close]').forEach(btn => btn.addEventListener('click', closePopover));
       el.searchInput?.addEventListener('input', handleSearchInput);
       el.quizList?.addEventListener('click', handleQuizListClick);
