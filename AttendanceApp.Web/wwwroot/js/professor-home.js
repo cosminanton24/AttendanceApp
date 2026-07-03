@@ -142,13 +142,22 @@ document.addEventListener('DOMContentLoaded', function () {
    * @returns {string} The join URL.
    */
   function getJoinUrl(lectureId) {
+    const publicAppOrigin = 'https://reproduce-pacifier-grievance.ngrok-free.dev';
+
     try {
       return new URL(
         `/lecture/join/${encodeURIComponent(String(lectureId))}`,
-        globalThis.location.origin
+        publicAppOrigin || globalThis.location.origin
       ).toString();
     } catch {
-      return `/lecture/join/${encodeURIComponent(String(lectureId))}`;
+      try {
+        return new URL(
+          `/lecture/join/${encodeURIComponent(String(lectureId))}`,
+          globalThis.location.origin
+        ).toString();
+      } catch {
+        return `/lecture/join/${encodeURIComponent(String(lectureId))}`;
+      }
     }
   }
 
