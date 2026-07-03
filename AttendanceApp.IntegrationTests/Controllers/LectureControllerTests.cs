@@ -784,6 +784,56 @@ public sealed class LectureControllerIntegrationTests : IAsyncLifetime
             $"Expected OK, Conflict, or BadRequest but got {secondJoinResponse.StatusCode}");
     }
 
+    [Fact]
+    public async Task JoinLecture_TooFarFromLecture_ReturnsFailure()
+    {
+        // Create professor and start lecture at New York coords
+        var profEmail = $"prof_{Guid.NewGuid():N}@example.com";
+        var profPassword = "StrongPass123!";
+
+        var profRegisterBody = new CreateUserRequest
+        {
+            Name = "Professor User",
+            Email = profEmail,
+            Password = profPassword,
+            UserType = UserType.Professor
+        };
+
+        var profRegisterResponse = await _httpClient.PostAsJsonAsync("/api/users/register", profRegisterBody);
+        profRegisterResponse.EnsureSuccessStatusCode();
+
+        var profLoginBody = new LoginUserRequest
+        {
+            Email = profEmail,
+            Password = profPassword
+        };
+
+        var profLoginResponse = await _httpClient.PostAsJsonAsync("/api/users/login", profLoginBody);
+        profLoginResponse.EnsureSuccessStatusCode();
+        var profJwt = await profLoginResponse.Content.ReadAsAsync<string>();
+
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", profJwt);
+
+        var lectureId = await CreateLectureAsync();
+        var changeStatusBody = new UpdateLectureStatusRequest { Status = LectureStatus.InProgress };
+        var changeStatusResponse = await _httpClient.PutAsJsonAsync($"/api/lectures/status/{lectureId}?pos=40.7128,-74.006,10", changeStatusBody);
+        changeStatusResponse.EnsureSuccessStatusCode();
+
+        // Switch to student
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        var (_, _) = await CreateAndAuthenticateUserAsync();
+
+        // Attempt to join from far away (London coordinates)
+        var joinResponse = await _httpClient.PostAsync($"/api/lectures/join/{lectureId}?pos=51.5074,-0.1278,10", content: null);
+
+        // Expect a failure due to distance (implementation may return BadRequest/Conflict/Forbidden)
+        Assert.True(
+            joinResponse.StatusCode == HttpStatusCode.BadRequest ||
+            joinResponse.StatusCode == HttpStatusCode.Conflict ||
+            joinResponse.StatusCode == HttpStatusCode.Forbidden,
+            $"Expected BadRequest, Conflict, or Forbidden but got {joinResponse.StatusCode}");
+    }
+
     // ---------- Additional GetStudentLectures Tests ----------
 
     [Fact]
